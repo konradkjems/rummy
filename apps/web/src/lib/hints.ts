@@ -36,9 +36,38 @@ export const GROUP_LABEL: Record<GroupKind, string> = {
 
 const NO_CONTRACT: Contract = { sets: 0, runs: 0 };
 
+/**
+ * Hands are immutable arrays (a new array whenever the hand changes), so
+ * contract searches can be cached per hand object. Re-renders from selection
+ * changes and animations then cost nothing.
+ */
+const cache = new WeakMap<readonly CardId[], Map<string, unknown>>();
+function memo<T>(hand: readonly CardId[], key: string, compute: () => T): T {
+  let entry = cache.get(hand);
+  if (!entry) {
+    entry = new Map();
+    cache.set(hand, entry);
+  }
+  if (!entry.has(key)) entry.set(key, compute());
+  return entry.get(key) as T;
+}
+
+/** Best split of the hand into melds (any number of sets and runs). */
+export function bestMelds(hand: readonly CardId[]) {
+  return memo(hand, 'best', () => findBestOpening(hand, NO_CONTRACT) ?? []);
+}
+
+export function canOpen(hand: readonly CardId[], contract: Contract): boolean {
+  return memo(hand, `open:${contract.sets}:${contract.runs}`, () => canMeetContract(hand, contract));
+}
+
 export function groupHand(hand: readonly CardId[]): HandGroup[] {
+  return memo(hand, 'groups', () => computeGroups(hand));
+}
+
+function computeGroups(hand: readonly CardId[]): HandGroup[] {
   const groups: HandGroup[] = [];
-  const best = findBestOpening(hand, NO_CONTRACT) ?? [];
+  const best = bestMelds(hand);
   const used = new Set<CardId>();
   for (const m of best) {
     groups.push({ kind: m.kind, cards: m.cards.slice() });
@@ -84,8 +113,8 @@ export interface ContractProgress {
 }
 
 export function contractProgress(hand: readonly CardId[], contract: Contract): ContractProgress {
-  const ready = canMeetContract(hand, contract);
-  const best = findBestOpening(hand, NO_CONTRACT) ?? [];
+  const ready = canOpen(hand, contract);
+  const best = bestMelds(hand);
   const sets = Math.min(contract.sets, best.filter((m) => m.kind === 'set').length);
   const runs = Math.min(contract.runs, best.filter((m) => m.kind === 'run').length);
   return { ready, sets: ready ? contract.sets : sets, runs: ready ? contract.runs : runs };

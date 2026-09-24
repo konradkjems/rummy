@@ -8,15 +8,13 @@ import {
   type CardId,
   type MeldSpec,
   canBuildNow,
-  canMeetContract,
   cardLabel,
   contractForRound,
   describeContract,
-  findBestOpening,
   interpretGroup,
 } from '@kova/rummy-engine';
 import { HUMAN, controller, useGame } from '@/lib/game';
-import { type BuildOption, buildOptions, meldTitle, playableCards } from '@/lib/hints';
+import { type BuildOption, bestMelds, buildOptions, canOpen, meldTitle, playableCards } from '@/lib/hints';
 import { latestUnfinished } from '@/lib/persistence';
 import { loadSettings, saveSettings, webglAvailable } from '@/lib/settings';
 import { buildTableModel, layoutScene, tableDims } from '@/lib/tableModel';
@@ -121,17 +119,14 @@ export default function GameScreen() {
   const opened = state.openedTurn[HUMAN] >= 0;
   const canBuild = inMeld && canBuildNow(state, HUMAN);
   const contract = contractForRound(state.round);
-  const ready = inMeld && !opened && canMeetContract(hand, contract);
+  const ready = inMeld && !opened && canOpen(hand, contract);
   const single = selected.length === 1 ? selected[0] : null;
   const options = single !== null && canBuild ? buildOptions(state, HUMAN, single) : [];
   const highlight = new Set(options.map((o) => o.meld.id));
   const playable = canBuild ? playableCards(state, HUMAN) : new Set<CardId>();
   const newMeld =
     canBuild && state.config.rules.newMeldsAfterOpening && selected.length >= 3 ? interpretGroup(selected) : null;
-  const canLayMore =
-    canBuild &&
-    state.config.rules.newMeldsAfterOpening &&
-    (findBestOpening(hand, { sets: 0, runs: 0 })?.length ?? 0) > 0;
+  const canLayMore = canBuild && state.config.rules.newMeldsAfterOpening && bestMelds(hand).length > 0;
   const topDiscard = state.discard[state.discard.length - 1];
 
   const act = (action: Action) => {
