@@ -22,6 +22,7 @@ for (let g = 0; g < games; g++) {
     jokerSwap: g % 4 !== 3,
     reshuffleDiscards: g % 5 !== 4,
     maxBuysPerRound: g % 3 === 0 ? 2 : null,
+    newMeldsAfterOpening: g % 7 !== 6,
   };
   try {
     const { state, actions: log } = playRandomGame(0xc0ffee + g, n, rules, {

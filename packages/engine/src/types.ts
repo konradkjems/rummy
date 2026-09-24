@@ -11,7 +11,7 @@ export interface GameConfig {
 }
 
 /**
- * Turn phases: draw -> meld (open / build / swap, then a mandatory discard) -> next player's draw.
+ * Turn phases: draw -> meld (open / build / swap / new melds, then a mandatory discard) -> next player's draw.
  *
  * The buy window after a discard has two stages. First the next player is
  * asked (the `draw` phase): taking the discard is their free first right,
@@ -43,6 +43,8 @@ export type Action =
   | { type: 'BuyClaim'; player: PlayerId }
   | { type: 'BuyPass'; player: PlayerId }
   | { type: 'Open'; player: PlayerId; melds: MeldSpec[] }
+  /** A new meld by a player who has already opened (house rule newMeldsAfterOpening). */
+  | { type: 'LayMeld'; player: PlayerId; meld: MeldSpec }
   | { type: 'Extend'; player: PlayerId; meldId: number; card: CardId; end?: RunEnd }
   | { type: 'SwapJoker'; player: PlayerId; meldId: number; card: CardId }
   | { type: 'Discard'; player: PlayerId; card: CardId }
@@ -63,6 +65,7 @@ export type GameEvent =
   | { t: 'buyPass'; p: PlayerId; card: CardId }
   | { t: 'buy'; p: PlayerId; card: CardId; penalty: boolean }
   | { t: 'open'; p: PlayerId; meldIds: number[]; cards: CardId[] }
+  | { t: 'meld'; p: PlayerId; meldId: number; cards: CardId[] }
   | { t: 'extend'; p: PlayerId; meldId: number; card: CardId; end: RunEnd }
   | { t: 'swap'; p: PlayerId; meldId: number; card: CardId; joker: CardId }
   | { t: 'discard'; p: PlayerId; card: CardId }

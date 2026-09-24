@@ -156,8 +156,11 @@ describe('buying (køb)', () => {
   });
 
   it('respects a buy limit per round', () => {
-    let s = { ...rig({ hands: [cs(H0), cs(H1), cs(H2)], discard: cs('QC'), rules: { maxBuysPerRound: 1 } }), topDiscarder: 2 };
-    s = { ...s, buys: [0, 1, 0] };
+    let s: GameState = {
+      ...rig({ hands: [cs(H0), cs(H1), cs(H2)], discard: cs('QC'), rules: { maxBuysPerRound: 1 } }),
+      topDiscarder: 2,
+      buys: [0, 1, 0],
+    };
     expect(buyEligible(s, 0)).toEqual([]);
     s = applyAction(s, draw(0));
     expect(s.phase.type).toBe('meld');
@@ -346,6 +349,67 @@ describe('building after opening', () => {
     const noSwap = { ...s, config: { ...s.config, rules: { ...s.config.rules, jokerSwap: false } } };
     expect(legalActions(noSwap, 0).some((a) => a.type === 'SwapJoker')).toBe(false);
     expect(validateAction(noSwap, { type: 'SwapJoker', player: 0, meldId: runId, card: c('6H') })).toMatch(/not allowed/);
+  });
+});
+
+describe('new melds after opening (house rule)', () => {
+  it('is not allowed in the opening turn unless building then is allowed', () => {
+    const hand = cs('7S 7H 7D KS KH KC 4D 4S 4C 9C 2S');
+    const open = (rules = {}) => {
+      let s = rig({ hands: [hand, cs(H1), cs(H2)], discard: cs('QD'), rules });
+      s = applyAction(s, take(0));
+      return applyAction(s, {
+        type: 'Open',
+        player: 0,
+        melds: [
+          { kind: 'set', cards: cs('7S 7H 7D') },
+          { kind: 'set', cards: cs('KS KH KC') },
+        ],
+      });
+    };
+    const lay = { type: 'LayMeld' as const, player: 0, meld: { kind: 'set' as const, cards: cs('4D 4S 4C') } };
+    expect(validateAction(open(), lay)).toMatch(/turn you open/);
+    expect(validateAction(open({ buildOnOpeningTurn: true }), lay)).toBeNull();
+  });
+
+  it('lays a new passer when the hand holds one', () => {
+    const hand = cs('7S 7H 7D KS KH KC 4D 4S 4C 9C 2S');
+    let s = rig({ hands: [hand, cs(H1), cs(H2)], discard: cs('QD'), rules: {} });
+    s = applyAction(s, take(0));
+    s = applyAction(s, {
+      type: 'Open',
+      player: 0,
+      melds: [
+        { kind: 'set', cards: cs('7S 7H 7D') },
+        { kind: 'set', cards: cs('KS KH KC') },
+      ],
+    });
+    s = applyAction(s, discard(0, '9C'));
+    s = applyActions(s, [draw(1), { type: 'BuyPass', player: 2 }]);
+    s = applyAction(s, { type: 'Discard', player: 1, card: s.hands[1][0] });
+    s = applyActions(s, [draw(2), { type: 'BuyPass', player: 0 }]);
+    s = applyAction(s, { type: 'Discard', player: 2, card: s.hands[2][0] });
+    s = applyActions(s, [draw(0), { type: 'BuyPass', player: 1 }]);
+    const lay = { type: 'LayMeld' as const, player: 0, meld: { kind: 'set' as const, cards: cs('4D 4S 4C') } };
+    const offered = legalActions(s, 0).filter((a) => a.type === 'LayMeld');
+    // The best offered meld may add a drawn joker; it must contain the three 4s.
+    expect(offered.some((a) => a.type === 'LayMeld' && lay.meld.cards.every((x) => a.meld.cards.includes(x)))).toBe(true);
+    s = expectOk(applyAction(s, lay));
+    expect(s.melds).toHaveLength(3);
+    expect(s.melds[2].owner).toBe(0);
+    expect(s.events.some((e) => e.t === 'meld')).toBe(true);
+
+    const off = { ...s, config: { ...s.config, rules: { ...s.config.rules, newMeldsAfterOpening: false } } };
+    expect(legalActions(off, 0).some((a) => a.type === 'LayMeld')).toBe(false);
+  });
+
+  it('is not a way to open: an unopened player cannot lay single melds', () => {
+    const hand = cs('4D 4S 4C 9C 2S 5H 8H JD QC KS AS');
+    let s = rig({ hands: [hand, cs(H1), cs(H2)], discard: cs('QD') });
+    s = applyAction(s, take(0));
+    expect(
+      validateAction(s, { type: 'LayMeld', player: 0, meld: { kind: 'set', cards: cs('4D 4S 4C') } }),
+    ).toMatch(/open/);
   });
 });
 

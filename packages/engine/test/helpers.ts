@@ -105,7 +105,7 @@ export function rig(setup: Setup): GameState {
 }
 
 export interface RandomPlayOptions {
-  /** Probability of choosing an Open/Extend/Swap action when one is available. */
+  /** Probability of choosing an Open/LayMeld/Extend/Swap action when one is available. */
   progressBias?: number;
   onState?: (state: GameState, action: Action | null) => void;
   maxActions?: number;
@@ -133,7 +133,9 @@ export function playRandomGame(
       const actors = playersToAct(state);
       const p = actors[rng.int(actors.length)];
       const legal = legalActions(state, p);
-      const progress = legal.filter((a) => a.type === 'Open' || a.type === 'Extend' || a.type === 'SwapJoker');
+      const progress = legal.filter(
+        (a) => a.type === 'Open' || a.type === 'LayMeld' || a.type === 'Extend' || a.type === 'SwapJoker',
+      );
       action = progress.length > 0 && rng.next() < bias ? rng.pick(progress) : rng.pick(legal);
     }
     state = applyAction(state, action);

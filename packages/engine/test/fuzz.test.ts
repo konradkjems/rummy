@@ -19,6 +19,7 @@ describe('fuzz', () => {
         jokerSwap: g % 4 !== 3,
         reshuffleDiscards: g % 5 !== 4,
         maxBuysPerRound: g % 3 === 0 ? 2 : null,
+        newMeldsAfterOpening: g % 7 !== 6,
       };
       const { state } = playRandomGame(1000 + g, n, rules, {
         onState: (s) => {

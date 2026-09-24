@@ -72,6 +72,13 @@ export interface RuleOptions {
   /** Open question 4: maximum number of buys per player per round (null = unlimited). */
   maxBuysPerRound: number | null;
   /**
+   * Found in simulation: may an opened player lay down *new* passere/løbere in
+   * later turns (with the same timing as building)? A passer holds at most one
+   * card per suit, so without this a round deadlocks as soon as the sets on
+   * the table are full: a player then draws one and discards one forever.
+   */
+  newMeldsAfterOpening: boolean;
+  /**
    * Safety valve, not a table rule: a round that reaches this many turns ends
    * and every player scores their hand. Never reached in sensible play.
    */
@@ -83,6 +90,7 @@ export const DEFAULT_RULES: Readonly<RuleOptions> = Object.freeze({
   jokerSwap: true,
   reshuffleDiscards: true,
   maxBuysPerRound: null,
+  newMeldsAfterOpening: true,
   maxTurnsPerRound: 400,
 });
 

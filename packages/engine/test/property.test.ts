@@ -19,6 +19,7 @@ const rulesArb = fc.record({
   jokerSwap: fc.boolean(),
   reshuffleDiscards: fc.boolean(),
   maxBuysPerRound: fc.constantFrom(null, 1, 3),
+  newMeldsAfterOpening: fc.boolean(),
 });
 
 describe('property: invariants hold through random games', () => {

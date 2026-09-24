@@ -41,6 +41,7 @@ export interface NewGameOptions {
 }
 
 const DRAW: Phase = { type: 'draw' };
+const NO_CONTRACT = { sets: 0, runs: 0 };
 const MELD: Phase = { type: 'meld' };
 
 export function createGame(opts: NewGameOptions): GameState {
@@ -193,6 +194,17 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
           actions.push({ type: 'Open', player, melds });
         }
       } else if (canBuildNow(state, player)) {
+        if (state.config.rules.newMeldsAfterOpening) {
+          const seen = new Set<string>();
+          for (const split of findOpenings(hand, NO_CONTRACT, 3)) {
+            for (const meld of split) {
+              const key = `${meld.kind}:${meld.cards.map(cardType).join(',')}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              actions.push({ type: 'LayMeld', player, meld });
+            }
+          }
+        }
         for (const meld of state.melds) {
           for (const card of distinct) {
             const ends = extensionEnds(meld, card);
@@ -262,6 +274,8 @@ export function applyAction(state: GameState, action: Action, opts: ApplyOptions
       return buyPass(state, action.player, log);
     case 'Open':
       return open(state, action.player, action.melds, log);
+    case 'LayMeld':
+      return layMeld(state, action.player, action.meld, log);
     case 'Extend':
       return extend(state, action.player, action.meldId, action.card, action.end, log);
     case 'SwapJoker':
@@ -446,6 +460,27 @@ function open(state: GameState, player: PlayerId, specs: MeldSpec[], log: boolea
     nextMeldId: nextId,
     openedTurn,
     events: withEvent(state, log, { t: 'open', p: player, meldIds: newMelds.map((m) => m.id), cards: all }),
+  };
+  return hand.length === 0 ? endRound(s, player, log) : s;
+}
+
+function layMeld(state: GameState, player: PlayerId, spec: MeldSpec, log: boolean): GameState {
+  if (!state.config.rules.newMeldsAfterOpening) fail('New melds after opening are not allowed with these house rules');
+  requireTurn(state, player, 'meld');
+  if (!hasOpened(state, player)) fail('You must open with the round contract first');
+  if (!canBuildNow(state, player)) fail('You cannot lay new melds in the turn you open');
+  if (!spec || !Array.isArray(spec.cards)) fail('Missing meld');
+  if (new Set(spec.cards).size !== spec.cards.length) fail('The same card is used twice');
+  const hand = removeCards(state.hands[player], spec.cards);
+  if (!hand) fail('Meld uses cards that are not in hand');
+  const meld = makeMeld(spec, state.nextMeldId, player);
+  if (!meld) fail(`Invalid ${spec.kind === 'set' ? 'passer' : 'løber'}`);
+  const s: GameState = {
+    ...state,
+    hands: replaceHand(state.hands, player, hand),
+    melds: [...state.melds, meld],
+    nextMeldId: state.nextMeldId + 1,
+    events: withEvent(state, log, { t: 'meld', p: player, meldId: meld.id, cards: spec.cards.slice() }),
   };
   return hand.length === 0 ? endRound(s, player, log) : s;
 }
