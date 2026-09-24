@@ -1,0 +1,25 @@
+{
+  "name": "@kova/rummy-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure, deterministic rules engine for L\u00f8bere og Passere (contract rummy). Zero runtime dependencies.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "fuzz": "tsx scripts/fuzz.ts"
+  },
+  "devDependencies": {
+    "fast-check": "^4.10.2",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.1",
+    "@types/node": "^22.19.0"
+  }
+}

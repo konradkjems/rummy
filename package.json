@@ -1,0 +1,16 @@
+{
+  "name": "kova-rummy",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @kova/web dev",
+    "build": "pnpm --filter @kova/web build",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "fuzz": "pnpm --filter @kova/rummy-engine fuzz",
+    "selfplay": "pnpm --filter @kova/rummy-ai selfplay"
+  }
+}
