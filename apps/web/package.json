@@ -1,0 +1,33 @@
+{
+  "name": "@kova/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "npx serve@latest out",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kova/rummy-ai": "workspace:*",
+    "@kova/rummy-engine": "workspace:*",
+    "@react-three/fiber": "^9.8.0",
+    "comlink": "^4.4.2",
+    "idb": "^8.0.3",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "^0.186.1",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.1"
+  }
+}
