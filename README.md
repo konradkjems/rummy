@@ -11,6 +11,13 @@ statistically best choice in every decision. It is built from the PRD in three p
 
 Everything runs in the browser. There is no backend in the MVP.
 
+<p>
+  <img src="docs/screenshots/table.png" width="220" alt="The 3D table on a phone">
+  <img src="docs/screenshots/buy.png" width="220" alt="The buy moment: KØB? with a countdown">
+  <img src="docs/screenshots/open.png" width="220" alt="Opening with the suggested melds">
+  <img src="docs/screenshots/review.png" width="220" alt="AI Review after a round">
+</p>
+
 ## Quick start
 
 ```bash
