@@ -14,6 +14,7 @@
 import { type Action, type GameState, type PlayerView, IllegalActionError, Rng, applyAction } from '@kova/rummy-engine';
 import { sampleWorld } from './determinize';
 import type { Knowledge } from './knowledge';
+import { type PolicyParams } from './policy';
 import { RolloutPolicy, playoutRound } from './rollout';
 
 export interface SearchCandidate {
@@ -38,6 +39,8 @@ export interface SearchOptions {
   switchZ?: number;
   /** Minimum expected gain in points before leaving the prior's favourite. */
   minGain?: number;
+  /** Policy every seat plays in the rollouts (default ROLLOUT_PARAMS). */
+  rolloutParams?: PolicyParams;
   now?: () => number;
 }
 
@@ -50,6 +53,8 @@ export interface CandidateStats {
 
 export interface SearchResult {
   best: number;
+  /** Rollout results per candidate (own penalty points), aligned by sampled world while both were alive. */
+  samples: number[][];
   worlds: number;
   playouts: number;
   elapsedMs: number;
@@ -81,6 +86,7 @@ export function searchCandidates(
   if (k <= 1) {
     return {
       best: 0,
+      samples: candidates.map(() => []),
       worlds: 0,
       playouts: 0,
       elapsedMs: 0,
@@ -100,7 +106,7 @@ export function searchCandidates(
       let points: number;
       try {
         for (const a of candidates[i].actions) s = applyAction(s, a, { log: false });
-        points = playoutRound(s, new RolloutPolicy(n)).points[me];
+        points = playoutRound(s, new RolloutPolicy(n, opts.rolloutParams)).points[me];
       } catch (e) {
         if (!(e instanceof IllegalActionError)) throw e;
         alive[i] = false;
@@ -171,6 +177,7 @@ export function searchCandidates(
   }
   return {
     best,
+    samples: results,
     worlds,
     playouts,
     elapsedMs: now() - start,

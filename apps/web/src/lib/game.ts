@@ -323,6 +323,12 @@ class Controller {
     }
     if (token !== this.token) return;
     this.set({ thinking: null });
+    if (actions.length === 0) {
+      // Never spin: leave the game paused with the error shown.
+      this.busy = false;
+      if (!this.store.error) this.set({ error: 'AI’en fandt intet træk. Prøv at genindlæse siden.' });
+      return;
+    }
     for (let i = 0; i < actions.length; i++) {
       if (token !== this.token) return;
       if (!this.apply(actions[i])) break;
@@ -372,8 +378,12 @@ class Controller {
 
     for (const q of waiting) {
       if (q === HUMAN) continue;
-      void aiDecide(getPlayerView(state, q), { difficulty: game.difficulty, timeMs: defaultThinkingMs() }).then(
-        (res) => {
+      void aiDecide(getPlayerView(state, q), { difficulty: game.difficulty, timeMs: defaultThinkingMs() })
+        .catch((e): { actions: Action[] } => {
+          console.error('AI buy decision failed', e);
+          return { actions: [] };
+        })
+        .then((res) => {
           if (token !== this.token || !this.stillWaiting(key, q)) return;
           const action = res.actions[0] ?? { type: 'BuyPass', player: q };
           // Human-like reaction time; claims are never instant, so people get a fair chance.
@@ -383,8 +393,7 @@ class Controller {
             this.apply(action);
             this.schedule();
           }, this.pace(delay));
-        },
-      );
+        });
     }
   }
 

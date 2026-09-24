@@ -66,6 +66,17 @@ export const FAST_PARAMS: PolicyParams = {
   feed: false,
 };
 
+/**
+ * Default rollout policy: the full greedy planner (so simulated opponents are
+ * as quick as real greedy players), without re-planning cards the plan uses
+ * while free cards are available, and without inference (none in rollouts).
+ */
+export const ROLLOUT_PARAMS: PolicyParams = {
+  ...GREEDY_PARAMS,
+  freeFirst: true,
+  feed: false,
+};
+
 /** Contract plan for a hand. The plan of the seat's own hand is cached on the seat. */
 export function plan(seat: Seat, counts: ArrayLike<number>, params: PolicyParams): ContractPlan {
   if (counts === seat.counts && seat.basePlan) return seat.basePlan;

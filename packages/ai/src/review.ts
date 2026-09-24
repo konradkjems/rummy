@@ -270,10 +270,13 @@ export function reviewRound(
     opts.onProgress?.(n, points.length);
     const view = getPlayerView(point.state, player);
     const { list, chosen } = candidatesFor(point, view);
-    let means: number[];
-    if (list.length <= 1) {
-      means = [NaN];
-    } else {
+    // Expected final points of the chosen action, and the best alternative's paired advantage.
+    // Picking the lowest of several noisy means is biased, so the advantage is shrunk by one
+    // standard error of the paired difference: noise alone is never reported as a mistake.
+    let expected = NaN;
+    let best = chosen;
+    let loss = 0;
+    if (list.length > 1) {
       const res = searchCandidates(view, buildKnowledge(view), list, {
         timeMs: Infinity,
         seed: seed + n * 131,
@@ -282,15 +285,28 @@ export function reviewRound(
         zCut: Infinity,
         switchZ: 0,
       });
-      means = res.candidates.map((c) => c.mean);
+      const mine = res.samples[chosen];
+      expected = mine.length ? mine.reduce((a, b) => a + b, 0) / mine.length : NaN;
+      res.samples.forEach((other, i) => {
+        if (i === chosen || other.length === 0 || mine.length === 0) return;
+        const len = Math.min(other.length, mine.length);
+        let sum = 0;
+        let sq = 0;
+        for (let w = 0; w < len; w++) {
+          const d = mine[w] - other[w];
+          sum += d;
+          sq += d * d;
+        }
+        const mean = sum / len;
+        const se = len > 1 ? Math.sqrt(Math.max(0, sq / len - mean * mean) / (len - 1)) : Infinity;
+        const shrunk = mean - se;
+        if (shrunk > loss) {
+          loss = shrunk;
+          best = i;
+        }
+      });
     }
-    let best = chosen;
-    means.forEach((m, i) => {
-      if (m < means[best] - 1e-9) best = i;
-    });
-    const expected = means[chosen];
-    const bestExpected = means[best];
-    const loss = Number.isFinite(expected) && Number.isFinite(bestExpected) ? Math.max(0, expected - bestExpected) : 0;
+    const bestExpected = Number.isFinite(expected) ? expected - loss : NaN;
 
     let discard: ReviewedDecision['discard'];
     const last = point.actions[point.actions.length - 1];

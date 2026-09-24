@@ -1,16 +1,16 @@
 /**
  * Fast playout policy and round simulation for the Monte Carlo search.
  *
- * Every seat plays the greedy evaluation policy with a narrower plan search
- * (FAST_PARAMS), with the plan of an unchanged hand cached between decisions.
+ * Every seat plays the greedy evaluation policy (ROLLOUT_PARAMS), with the
+ * plan of an unchanged hand cached between decisions.
  * Seats only look at their own hand and the public table, never at the other
  * hands of the sampled world.
  */
 import { type Action, type CardId, type GameState, applyAction, scoreHand } from '@kova/rummy-engine';
 import type { ContractPlan } from './plan';
 import {
-  FAST_PARAMS,
   type PolicyParams,
+  ROLLOUT_PARAMS,
   buildEverything,
   chooseDiscard,
   decideBuy,
@@ -32,7 +32,7 @@ export class RolloutPolicy {
 
   constructor(
     numPlayers: number,
-    readonly params: PolicyParams = FAST_PARAMS,
+    readonly params: PolicyParams = ROLLOUT_PARAMS,
   ) {
     this.plans = new Array(numPlayers).fill(null);
     this.keys = new Array(numPlayers).fill(0);

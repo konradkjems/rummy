@@ -27,6 +27,7 @@ import { buildKnowledge } from './knowledge';
 import { type SearchCandidate, type SearchResult, searchCandidates } from './ismcts';
 import {
   GREEDY_PARAMS,
+  type PolicyParams,
   buildEverything,
   buyValue,
   connections,
@@ -54,6 +55,13 @@ export interface DecideOptions {
   /** Cap on sampled worlds (makes the hard agent deterministic for a seed). */
   maxWorlds?: number;
   seed?: number;
+  /** Tuning knobs for experiments (self-play); defaults are the shipped settings. */
+  tuning?: {
+    switchZ?: number;
+    rolloutParams?: PolicyParams;
+    /** Use the Layer 2 inference weights when sampling worlds (default true). */
+    inference?: boolean;
+  };
 }
 
 export interface Decision {
@@ -216,12 +224,17 @@ function hardDecision(view: PlayerView, opts: DecideOptions, seed: number): Deci
   const knowledge = buildKnowledge(view);
   const seat = seatFromView(view, knowledge);
   const ph = view.phase;
+  const tuning = opts.tuning ?? {};
+  const sampling =
+    tuning.inference === false ? { ...knowledge, weights: knowledge.weights.map((w) => w.map(() => 1)) } : knowledge;
   const search = (candidates: SearchCandidate[], share: number): Decision => {
     if (candidates.length === 1) return { actions: candidates[0].actions };
-    const result = searchCandidates(view, knowledge, candidates, {
+    const result = searchCandidates(view, sampling, candidates, {
       timeMs: timeMs * share,
       seed,
       maxWorlds: opts.maxWorlds,
+      switchZ: tuning.switchZ,
+      rolloutParams: tuning.rolloutParams,
     });
     return { actions: candidates[result.best].actions, search: result };
   };

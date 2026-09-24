@@ -3,3 +3,5 @@ node_modules
 out
 pnpm-lock.yaml
 coverage
+*.tsbuildinfo
+apps/web/next-env.d.ts
