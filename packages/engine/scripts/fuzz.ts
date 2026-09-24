@@ -8,7 +8,7 @@
 import { checkInvariants } from '../src';
 import { playRandomGame } from '../test/helpers';
 
-const games = Number(process.argv[2] ?? 10_000);
+const games = Number(process.argv.slice(2).find((a) => /^\d+$/.test(a)) ?? 10_000);
 const started = Date.now();
 let actions = 0;
 let rounds = 0;

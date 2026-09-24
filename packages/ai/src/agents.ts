@@ -23,7 +23,7 @@ import {
   isJoker,
   legalActions,
 } from '@kova/rummy-engine';
-import { buildKnowledge } from './knowledge';
+import { type Knowledge, buildKnowledge } from './knowledge';
 import { type SearchCandidate, type SearchResult, searchCandidates } from './ismcts';
 import {
   GREEDY_PARAMS,
@@ -168,9 +168,12 @@ interface Prefix {
 }
 
 /** Candidate plans for the meld phase: open now or wait, times the best few discards. */
-export function turnCandidates(view: PlayerView, maxDiscards = 2): SearchCandidate[] {
+export function turnCandidates(
+  view: PlayerView,
+  maxDiscards = 2,
+  knowledge: Knowledge = buildKnowledge(view),
+): SearchCandidate[] {
   const me = view.me;
-  const knowledge = buildKnowledge(view);
   const seat = seatFromView(view, knowledge);
   const base = stateFromView(view);
   const prefixes: Prefix[] = [];
@@ -246,7 +249,7 @@ function hardDecision(view: PlayerView, opts: DecideOptions, seed: number): Deci
     if (top === null) return { actions: [deck] };
     const t = cardType(top);
     if (isJoker(top)) return { actions: [take] };
-    if (seat.opened) return { actions: [seat.playable[t] ? take : deck] };
+    if (seat.opened) return { actions: [decideDraw(seat, GREEDY_PARAMS) === 'discard' ? take : deck] };
     // A card with no connection to the hand is never worth taking.
     const counts = seat.counts.slice();
     counts[t]++;
@@ -277,5 +280,5 @@ function hardDecision(view: PlayerView, opts: DecideOptions, seed: number): Deci
     );
   }
 
-  return search(turnCandidates(view), 1);
+  return search(turnCandidates(view, 2, knowledge), 1);
 }
