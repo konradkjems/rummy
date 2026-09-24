@@ -108,9 +108,30 @@ No language model, only probability. The layers are in `packages/ai/src`:
 
 Difficulties: `easy` = random with basic sense, `medium` = greedy evaluation, `hard` ("Umulig") = ISMCTS.
 
-### Self-play results
+### Self-play validation
 
-See [Self-play validation](#self-play-validation) below.
+Seats rotate every game. The numbers below were measured with `pnpm selfplay` in this repository:
+
+| Match (games)                                   | Agent  | Avg total | Avg place | Win rate |
+| ----------------------------------------------- | ------ | --------: | --------: | -------: |
+| greedy vs 2 random (1,000)                      | medium |       5.4 |      1.00 |     100% |
+|                                                 | easy   |     634.1 |      2.50 |       0% |
+| ISMCTS vs 2 greedy (240, 100 worlds / decision) | hard   |     189.3 |      1.95 |    37.9% |
+|                                                 | medium |     197.8 |      2.02 |    31.5% |
+
+In a 3-player game 33.3% is an even share. ISMCTS beats greedy on points, placement and win rate, but only modestly:
+about 1.5 standard errors on 240 games. The PRD's acceptance target ("markant", 10,000+ games) is **not met yet**. A
+hard game costs about 35 s of CPU in the harness, so 10,000 games need about 100 CPU-hours. The harness supports it
+(`pnpm selfplay -- --games 10000 --agents hard,medium,medium`).
+
+What the experiments showed along the way:
+
+- The ISMCTS is limited by noise. With 12-20 sampled worlds per decision it played worse than greedy. Anchoring on the
+  greedy choice and switching only on clear evidence fixed that.
+- Rollout opponents must be as strong as the real ones. With a weaker rollout policy the search assumed rounds would
+  last longer, played too slowly and closed fewer rounds.
+- Next steps: test whether more worlds per decision help (under 20 lost to greedy, 100 wins modestly), add a leaf
+  evaluation to cut rollout variance, and widen the candidate sets for the buy and open-now decisions.
 
 ## AI Review
 
