@@ -55,7 +55,6 @@ interface Scratch {
   slots: Float64Array;
   chosen: Int16Array;
   bestChosen: Int16Array;
-  sortBuf: Float64Array;
   /** Undo log of card types taken from counts, and its length per depth. */
   taken: Int16Array;
   standalone: Float64Array;
@@ -67,7 +66,6 @@ const scratch: Scratch = {
   slots: new Float64Array(64),
   chosen: new Int16Array(8),
   bestChosen: new Int16Array(8),
-  sortBuf: new Float64Array(64),
   taken: new Int16Array(64),
   standalone: new Float64Array(NUM_TARGETS),
   naturals: new Int8Array(NUM_TARGETS),
@@ -135,17 +133,52 @@ function targetSlots(
   return k;
 }
 
-function leafCost(slots: Float64Array, n: number, jokers: number, buf: Float64Array): number {
+function leafCost(slots: Float64Array, n: number, jokers: number): number {
   if (n <= jokers) return 0;
-  for (let i = 0; i < n; i++) buf[i] = slots[i];
-  const sub = buf.subarray(0, n);
-  sub.sort();
-  // Jokers fill the most expensive holes.
-  const remaining = n - jokers;
   let sum = 0;
-  for (let i = 0; i < remaining; i++) sum += sub[i];
+  for (let i = 0; i < n; i++) sum += slots[i];
+  // Jokers fill the most expensive holes: subtract the `jokers` largest slots (jokers <= 4, so a few passes).
+  let removed = 0;
+  let lastMax = Infinity;
+  let lastIdx = -1;
+  for (let j = 0; j < jokers; j++) {
+    let max = -1;
+    let idx = -1;
+    for (let i = 0; i < n; i++) {
+      const v = slots[i];
+      // Take the next largest (ties broken by index so equal slots are each taken once).
+      if ((v < lastMax || (v === lastMax && i > lastIdx)) && v > max) {
+        max = v;
+        idx = i;
+      }
+    }
+    if (idx < 0) break;
+    removed += max;
+    lastMax = max;
+    lastIdx = idx;
+  }
+  const remaining = n - jokers;
   // Missing cards arrive in parallel: k equally hard holes take H(k)/k of the serial time.
-  return (sum * HARMONIC[Math.min(remaining, 16)]) / remaining;
+  return ((sum - removed) * HARMONIC[Math.min(remaining, 16)]) / remaining;
+}
+
+/** Insert target into a best-first list of at most `k` entries by (cost asc, naturals desc). */
+function keepBest(list: number[], k: number, target: number, cost: Float64Array, nat: Int8Array) {
+  let i = list.length;
+  if (i >= k) {
+    const worst = list[k - 1];
+    if (cost[target] > cost[worst] || (cost[target] === cost[worst] && nat[target] <= nat[worst])) return;
+    i = k - 1;
+    list.length = k - 1;
+  }
+  list.push(target);
+  while (i > 0) {
+    const prev = list[i - 1];
+    if (cost[prev] < cost[target] || (cost[prev] === cost[target] && nat[prev] >= nat[target])) break;
+    list[i] = prev;
+    list[i - 1] = target;
+    i--;
+  }
 }
 
 const takenLen = new Int16Array(1);
@@ -159,13 +192,15 @@ export function planContract(
 ): ContractPlan {
   const setWidth = opts.setWidth ?? 6;
   const runWidth = opts.runWidth ?? 8;
-  const { counts, slots, chosen, bestChosen, sortBuf, taken, standalone, naturals } = scratch;
+  const { counts, slots, chosen, bestChosen, taken, standalone, naturals } = scratch;
   for (let t = 0; t < NUM_TYPES; t++) counts[t] = hand[t];
   const jokers = counts[JOKER_TYPE];
 
-  // Rank targets by standalone cost.
-  const setCands: number[] = [];
-  const runCands: number[] = [];
+  // Keep the most promising targets by standalone cost.
+  const sets: number[] = [];
+  const runs: number[] = [];
+  const setK = Math.max(setWidth, contract.sets);
+  const runK = Math.max(runWidth, contract.runs);
   for (let target = 0; target < NUM_TARGETS; target++) {
     const isSet = target < NUM_SET_TARGETS;
     if (isSet ? contract.sets === 0 : contract.runs === 0) continue;
@@ -174,13 +209,9 @@ export function planContract(
     for (let i = 0; i < n; i++) c += slots[i];
     standalone[target] = c;
     naturals[target] = (isSet ? 3 : 4) - n;
-    (isSet ? setCands : runCands).push(target);
+    if (isSet) keepBest(sets, setK, target, standalone, naturals);
+    else keepBest(runs, runK, target, standalone, naturals);
   }
-  const byCost = (a: number, b: number) => standalone[a] - standalone[b] || naturals[b] - naturals[a];
-  setCands.sort(byCost);
-  runCands.sort(byCost);
-  const sets = setCands.length > setWidth ? setCands.slice(0, Math.max(setWidth, contract.sets)) : setCands;
-  const runs = runCands.length > runWidth ? runCands.slice(0, Math.max(runWidth, contract.runs)) : runCands;
 
   const need = contract.sets + contract.runs;
   const needSets = contract.sets;
@@ -189,7 +220,7 @@ export function planContract(
 
   const dfs = (depth: number, fromSet: number, fromRun: number, slotCount: number, usedNat: number, tk: number) => {
     if (depth === need) {
-      const cost = leafCost(slots, slotCount, jokers, sortBuf);
+      const cost = leafCost(slots, slotCount, jokers);
       if (cost < bestCost - 1e-9 || (cost < bestCost + 1e-9 && usedNat > bestUsed)) {
         bestCost = cost;
         bestUsed = usedNat;
@@ -231,8 +262,7 @@ export function planContract(
     }
     for (let k = slotCount; k < end; k++) {
       // A set hole can be filled by any missing suit; a run hole only by its own card.
-      const typesForSlot =
-        target < NUM_SET_TARGETS ? holeTypes : [holeTypes[k - slotCount]];
+      const typesForSlot = target < NUM_SET_TARGETS ? holeTypes : [holeTypes[k - slotCount]];
       slotOuts.push([JOKER_TYPE, ...typesForSlot]);
     }
     slotCount = end;

@@ -95,9 +95,14 @@ function randomDecision(view: PlayerView, rng: Rng): Action[] {
   const me = view.me;
   const ph = view.phase;
   if (ph.type === 'draw') {
-    return [rng.next() < 0.35 && view.discard.length > 0 ? { type: 'DrawFromDiscard', player: me } : { type: 'DrawFromDeck', player: me }];
+    return [
+      rng.next() < 0.35 && view.discard.length > 0
+        ? { type: 'DrawFromDiscard', player: me }
+        : { type: 'DrawFromDeck', player: me },
+    ];
   }
-  if (ph.type === 'buy') return [rng.next() < 0.06 ? { type: 'BuyClaim', player: me } : { type: 'BuyPass', player: me }];
+  if (ph.type === 'buy')
+    return [rng.next() < 0.06 ? { type: 'BuyClaim', player: me } : { type: 'BuyPass', player: me }];
   // Meld phase.
   let s: GameState = stateFromView(view);
   const actions: Action[] = [];
@@ -130,10 +135,16 @@ function greedyDecision(view: PlayerView): Action[] {
   const seat = seatFromView(view);
   const ph = view.phase;
   if (ph.type === 'draw') {
-    return [decideDraw(seat, GREEDY_PARAMS) === 'discard' ? { type: 'DrawFromDiscard', player: me } : { type: 'DrawFromDeck', player: me }];
+    return [
+      decideDraw(seat, GREEDY_PARAMS) === 'discard'
+        ? { type: 'DrawFromDiscard', player: me }
+        : { type: 'DrawFromDeck', player: me },
+    ];
   }
   if (ph.type === 'buy') {
-    return [decideBuy(seat, ph.card, GREEDY_PARAMS) ? { type: 'BuyClaim', player: me } : { type: 'BuyPass', player: me }];
+    return [
+      decideBuy(seat, ph.card, GREEDY_PARAMS) ? { type: 'BuyClaim', player: me } : { type: 'BuyPass', player: me },
+    ];
   }
   return planTurn(stateFromView(view), seat, GREEDY_PARAMS);
 }
@@ -149,7 +160,7 @@ interface Prefix {
 }
 
 /** Candidate plans for the meld phase: open now or wait, times the best few discards. */
-export function turnCandidates(view: PlayerView, maxDiscards = 3): SearchCandidate[] {
+export function turnCandidates(view: PlayerView, maxDiscards = 2): SearchCandidate[] {
   const me = view.me;
   const knowledge = buildKnowledge(view);
   const seat = seatFromView(view, knowledge);
@@ -183,7 +194,10 @@ export function turnCandidates(view: PlayerView, maxDiscards = 3): SearchCandida
       return [{ actions: prefix.actions, label: `${prefix.label} og luk`, prior: 100 }];
     }
     const hand = prefix.state.hands[me];
-    const after = prefix.opened && !wasOpen ? seatFromView({ ...view, hand, melds: prefix.state.melds, openedTurn: prefix.state.openedTurn }, knowledge) : seat;
+    const after =
+      prefix.opened && !wasOpen
+        ? seatFromView({ ...view, hand, melds: prefix.state.melds, openedTurn: prefix.state.openedTurn }, knowledge)
+        : seat;
     const discards = topDiscards(after, hand, GREEDY_PARAMS, maxDiscards);
     discards.forEach((card, di) => {
       candidates.push({
@@ -223,7 +237,8 @@ function hardDecision(view: PlayerView, opts: DecideOptions, seed: number): Deci
     // A card with no connection to the hand is never worth taking.
     const counts = seat.counts.slice();
     counts[t]++;
-    if (connections(seat, counts, t) === 0 && !plan(seat, seat.counts, GREEDY_PARAMS).outs[t]) return { actions: [deck] };
+    if (connections(seat, counts, t) === 0 && !plan(seat, seat.counts, GREEDY_PARAMS).outs[t])
+      return { actions: [deck] };
     const greedy = decideDraw(seat, GREEDY_PARAMS);
     return search(
       [

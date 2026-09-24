@@ -47,7 +47,14 @@ export interface Seat {
   basePlan?: ContractPlan;
 }
 
-function riskLevel(n: number, me: number, opened: boolean[], handSizes: number[], deckSize: number, turn: number): number {
+function riskLevel(
+  n: number,
+  me: number,
+  opened: boolean[],
+  handSizes: number[],
+  deckSize: number,
+  turn: number,
+): number {
   let risk = 0.04 + Math.min(0.1, turn / (n * 150));
   for (let p = 0; p < n; p++) {
     if (p === me || !opened[p]) continue;

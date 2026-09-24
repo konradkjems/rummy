@@ -1,22 +1,23 @@
 /**
  * Fast playout policy and round simulation for the Monte Carlo search.
  *
- * Every seat plays the same cheap version of the evaluation function: one
- * contract plan per turn, cached between turns, and simple rules for draws and
- * buys derived from that plan. Seats only look at their own hand and the
- * public table, never at the other hands of the sampled world.
+ * Every seat plays the greedy evaluation policy with a narrower plan search
+ * (FAST_PARAMS), with the plan of an unchanged hand cached between decisions.
+ * Seats only look at their own hand and the public table, never at the other
+ * hands of the sampled world.
  */
-import {
-  type Action,
-  type CardId,
-  type GameState,
-  JOKER_TYPE,
-  applyAction,
-  cardType,
-  scoreHand,
-} from '@kova/rummy-engine';
+import { type Action, type CardId, type GameState, applyAction, scoreHand } from '@kova/rummy-engine';
 import type { ContractPlan } from './plan';
-import { FAST_PARAMS, type PolicyParams, buildEverything, chooseDiscard, plan, planTurn } from './policy';
+import {
+  FAST_PARAMS,
+  type PolicyParams,
+  buildEverything,
+  chooseDiscard,
+  decideBuy,
+  decideDraw,
+  plan,
+  planTurn,
+} from './policy';
 import { seatFromState } from './seat';
 
 function handKey(hand: readonly CardId[]): number {
@@ -49,28 +50,18 @@ export class RolloutPolicy {
   }
 
   draw(state: GameState, p: number): Action {
-    const top = state.discard.length > 0 ? state.discard[state.discard.length - 1] : null;
-    if (top === null) return { type: 'DrawFromDeck', player: p };
-    const t = cardType(top);
-    if (t === JOKER_TYPE) return { type: 'DrawFromDiscard', player: p };
-    if (state.openedTurn[p] >= 0) {
-      const seat = seatFromState(state, p);
-      return seat.playable[t] ? { type: 'DrawFromDiscard', player: p } : { type: 'DrawFromDeck', player: p };
-    }
-    const pl = this.planFor(state, p);
-    return pl.missing > 0 && pl.outs[t] ? { type: 'DrawFromDiscard', player: p } : { type: 'DrawFromDeck', player: p };
+    const seat = seatFromState(state, p);
+    if (!seat.opened) seat.basePlan = this.planFor(state, p);
+    return decideDraw(seat, this.params) === 'discard'
+      ? { type: 'DrawFromDiscard', player: p }
+      : { type: 'DrawFromDeck', player: p };
   }
 
   buy(state: GameState, p: number, card: CardId): boolean {
     if (state.openedTurn[p] >= 0) return false;
-    const t = cardType(card);
-    if (t === JOKER_TYPE) return state.deck.length > 10;
-    const pl = this.planFor(state, p);
-    if (pl.missing === 0 || !pl.outs[t]) return false;
-    if (state.deck.length < 15) return false;
-    let opponentsOpened = 0;
-    for (let q = 0; q < state.config.numPlayers; q++) if (q !== p && state.openedTurn[q] >= 0) opponentsOpened++;
-    return opponentsOpened === 0 && pl.missing <= 3;
+    const seat = seatFromState(state, p);
+    seat.basePlan = this.planFor(state, p);
+    return decideBuy(seat, card, this.params);
   }
 
   turn(state: GameState, p: number): Action[] {
@@ -99,11 +90,7 @@ export interface RolloutResult {
  * Play the current round to its end. Buy races are resolved in seat order
  * after the drawer (the closest interested seat wins).
  */
-export function playoutRound(
-  start: GameState,
-  policy: RolloutPolicy,
-  maxTurns = 160,
-): RolloutResult {
+export function playoutRound(start: GameState, policy: RolloutPolicy, maxTurns = 160): RolloutResult {
   let s = start;
   const startTurn = s.turn;
   const apply = (a: Action) => {

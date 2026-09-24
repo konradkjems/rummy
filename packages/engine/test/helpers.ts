@@ -45,11 +45,7 @@ export function c(code: string): CardId {
 }
 
 export function cs(codes: string): CardId[] {
-  return codes
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(c);
+  return codes.trim().split(/\s+/).filter(Boolean).map(c);
 }
 
 export interface Setup {

@@ -120,7 +120,14 @@ describe('buying (køb)', () => {
   it('only players other than the drawer and the discarder may buy', () => {
     const s = base();
     expect(buyEligible(s, 0)).toEqual([1]);
-    const s4 = { ...rig({ numPlayers: 4, hands: [cs(H0), cs(H1), cs(H2), cs('2D 3S 4C 5H 6S 7D 8H 9C 10C JS QD')], discard: cs('QC') }), topDiscarder: 3 };
+    const s4 = {
+      ...rig({
+        numPlayers: 4,
+        hands: [cs(H0), cs(H1), cs(H2), cs('2D 3S 4C 5H 6S 7D 8H 9C 10C JS QD')],
+        discard: cs('QC'),
+      }),
+      topDiscarder: 3,
+    };
     expect(buyEligible(s4, 0)).toEqual([1, 2]);
   });
 
@@ -196,18 +203,33 @@ describe('opening (at lægge ned)', () => {
 
   it('refuses an opening that does not cover the contract', () => {
     const s = applyAction(setup(), take(0));
-    expect(
-      validateAction(s, { type: 'Open', player: 0, melds: [{ kind: 'set', cards: cs('7S 7H 7D') }] }),
-    ).toMatch(/contract/);
+    expect(validateAction(s, { type: 'Open', player: 0, melds: [{ kind: 'set', cards: cs('7S 7H 7D') }] })).toMatch(
+      /contract/,
+    );
   });
 
   it('refuses invalid melds, foreign cards and duplicate cards', () => {
     const s = applyAction(setup(), take(0));
     const bad = (melds: { kind: 'set' | 'run'; cards: number[] }[]) =>
       validateAction(s, { type: 'Open', player: 0, melds });
-    expect(bad([{ kind: 'set', cards: cs('7S 7H 2S') }, { kind: 'set', cards: cs('KS KH KC') }])).toMatch(/Invalid/);
-    expect(bad([{ kind: 'set', cards: cs('7S 7H 7C') }, { kind: 'set', cards: cs('KS KH KC') }])).toMatch(/not in hand/);
-    expect(bad([{ kind: 'set', cards: cs('7S 7H 7D') }, { kind: 'set', cards: cs('7S KH KC') }])).toMatch(/twice/);
+    expect(
+      bad([
+        { kind: 'set', cards: cs('7S 7H 2S') },
+        { kind: 'set', cards: cs('KS KH KC') },
+      ]),
+    ).toMatch(/Invalid/);
+    expect(
+      bad([
+        { kind: 'set', cards: cs('7S 7H 7C') },
+        { kind: 'set', cards: cs('KS KH KC') },
+      ]),
+    ).toMatch(/not in hand/);
+    expect(
+      bad([
+        { kind: 'set', cards: cs('7S 7H 7D') },
+        { kind: 'set', cards: cs('7S KH KC') },
+      ]),
+    ).toMatch(/twice/);
   });
 
   it('may include extra melds and extra cards', () => {
@@ -317,7 +339,11 @@ describe('building after opening', () => {
       { kind: 'set' as const, cards: cs(b) },
     ];
     s = applyActions(s, [take(0), { type: 'Open', player: 0, melds: sets('7S 7H 7D', 'KS KH KC') }, discard(0, '10H')]);
-    s = applyActions(s, [take(1), { type: 'Open', player: 1, melds: sets('5S 5H 5D', '8S 8H 8D') }, discard(1, 'AH:1')]);
+    s = applyActions(s, [
+      take(1),
+      { type: 'Open', player: 1, melds: sets('5S 5H 5D', '8S 8H 8D') },
+      discard(1, 'AH:1'),
+    ]);
     s = applyActions(s, [draw(2), { type: 'BuyPass', player: 0 }]);
     s = applyAction(s, { type: 'Discard', player: 2, card: s.hands[2][0] });
     s = applyActions(s, [draw(0), { type: 'BuyPass', player: 1 }, discard(0, '2S')]);
@@ -348,7 +374,9 @@ describe('building after opening', () => {
 
     const noSwap = { ...s, config: { ...s.config, rules: { ...s.config.rules, jokerSwap: false } } };
     expect(legalActions(noSwap, 0).some((a) => a.type === 'SwapJoker')).toBe(false);
-    expect(validateAction(noSwap, { type: 'SwapJoker', player: 0, meldId: runId, card: c('6H') })).toMatch(/not allowed/);
+    expect(validateAction(noSwap, { type: 'SwapJoker', player: 0, meldId: runId, card: c('6H') })).toMatch(
+      /not allowed/,
+    );
   });
 });
 
@@ -393,7 +421,9 @@ describe('new melds after opening (house rule)', () => {
     const lay = { type: 'LayMeld' as const, player: 0, meld: { kind: 'set' as const, cards: cs('4D 4S 4C') } };
     const offered = legalActions(s, 0).filter((a) => a.type === 'LayMeld');
     // The best offered meld may add a drawn joker; it must contain the three 4s.
-    expect(offered.some((a) => a.type === 'LayMeld' && lay.meld.cards.every((x) => a.meld.cards.includes(x)))).toBe(true);
+    expect(offered.some((a) => a.type === 'LayMeld' && lay.meld.cards.every((x) => a.meld.cards.includes(x)))).toBe(
+      true,
+    );
     s = expectOk(applyAction(s, lay));
     expect(s.melds).toHaveLength(3);
     expect(s.melds[2].owner).toBe(0);
@@ -407,9 +437,9 @@ describe('new melds after opening (house rule)', () => {
     const hand = cs('4D 4S 4C 9C 2S 5H 8H JD QC KS AS');
     let s = rig({ hands: [hand, cs(H1), cs(H2)], discard: cs('QD') });
     s = applyAction(s, take(0));
-    expect(
-      validateAction(s, { type: 'LayMeld', player: 0, meld: { kind: 'set', cards: cs('4D 4S 4C') } }),
-    ).toMatch(/open/);
+    expect(validateAction(s, { type: 'LayMeld', player: 0, meld: { kind: 'set', cards: cs('4D 4S 4C') } })).toMatch(
+      /open/,
+    );
   });
 });
 

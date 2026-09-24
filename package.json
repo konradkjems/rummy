@@ -11,6 +11,11 @@
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "fuzz": "pnpm --filter @kova/rummy-engine fuzz",
-    "selfplay": "pnpm --filter @kova/rummy-ai selfplay"
+    "selfplay": "pnpm --filter @kova/rummy-ai selfplay",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
   }
 }

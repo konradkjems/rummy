@@ -133,8 +133,7 @@ function search(counts0: readonly number[], contract: Contract, opts: SearchOpti
   let nodes = 0;
   let done = false;
 
-  const worstKept = () =>
-    results.length < opts.limit ? -1 : results[results.length - 1].points;
+  const worstKept = () => (results.length < opts.limit ? -1 : results[results.length - 1].points);
 
   const record = () => {
     const res: SearchResult = { templates: stack.slice(), points: melded, cards: meldedCards };
@@ -275,4 +274,3 @@ export function specsMeetContract(specs: readonly MeldSpec[], contract: Contract
   }
   return sets >= contract.sets && runs >= contract.runs;
 }
-

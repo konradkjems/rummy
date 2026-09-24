@@ -64,7 +64,9 @@ for (let g = 0; g < games; g++) {
   }
 }
 
-console.log(`\n${games} games, agents: ${agents.join(', ')}, time/decision: ${timeMs}ms${maxWorlds ? `, max ${maxWorlds} worlds` : ''}\n`);
+console.log(
+  `\n${games} games, agents: ${agents.join(', ')}, time/decision: ${timeMs}ms${maxWorlds ? `, max ${maxWorlds} worlds` : ''}\n`,
+);
 console.log('agent        avg total   avg place   win rate   pts/round   rounds closed');
 for (const [label, t] of [...byLabel].sort()) {
   console.log(

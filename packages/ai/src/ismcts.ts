@@ -30,6 +30,14 @@ export interface SearchOptions {
   minWorlds?: number;
   /** Eliminate a candidate when its paired disadvantage exceeds this many standard errors. */
   zCut?: number;
+  /**
+   * Keep the prior's favourite (the greedy choice) unless the search finds an
+   * alternative that is better by this many standard errors of the paired
+   * difference. 0 = always take the lowest mean.
+   */
+  switchZ?: number;
+  /** Minimum expected gain in points before leaving the prior's favourite. */
+  minGain?: number;
   now?: () => number;
 }
 
@@ -139,6 +147,28 @@ export function searchCandidates(
     if (better) best = i;
   }
   if (best < 0) best = 0;
+
+  // Anchor on the heuristic favourite: only switch away on clear evidence.
+  const switchZ = opts.switchZ ?? 1;
+  if (switchZ > 0) {
+    let anchor = 0;
+    for (let i = 1; i < k; i++) if (candidates[i].prior > candidates[anchor].prior) anchor = i;
+    if (anchor !== best && alive[anchor]) {
+      const a = results[anchor];
+      const b = results[best];
+      const len = Math.min(a.length, b.length);
+      let sum = 0;
+      let sq = 0;
+      for (let w = 0; w < len; w++) {
+        const d = a[a.length - len + w] - b[b.length - len + w];
+        sum += d;
+        sq += d * d;
+      }
+      const gain = len ? sum / len : 0;
+      const se = len > 1 ? Math.sqrt(Math.max(1e-9, sq / len - gain * gain) / len) : Infinity;
+      if (!(gain > Math.max(opts.minGain ?? 0.3, switchZ * se))) best = anchor;
+    }
+  }
   return {
     best,
     worlds,

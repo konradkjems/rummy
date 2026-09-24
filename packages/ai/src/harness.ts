@@ -5,6 +5,7 @@
 import {
   type Action,
   type GameState,
+  type PlayerView,
   type RuleOptions,
   applyAction,
   createGame,
@@ -13,8 +14,11 @@ import {
 } from '@kova/rummy-engine';
 import { type Difficulty, decide } from './agents';
 
+/** A custom agent: given a view, return the actions of its decision. */
+export type AgentFn = (view: PlayerView) => Action[];
+
 export interface MatchConfig {
-  agents: Difficulty[];
+  agents: (Difficulty | AgentFn)[];
   seed: number;
   rules?: Partial<RuleOptions>;
   /** Thinking time per turn decision for hard agents. */
@@ -42,12 +46,12 @@ export function playMatch(cfg: MatchConfig): MatchResult {
     actions.push(a);
     cfg.onAction?.(state, a);
   };
-  const ask = (p: number): Action[] =>
-    decide(getPlayerView(state, p), {
-      difficulty: cfg.agents[p],
-      timeMs: cfg.timeMs,
-      maxWorlds: cfg.maxWorlds,
-    }).actions;
+  const ask = (p: number): Action[] => {
+    const agent = cfg.agents[p];
+    const view = getPlayerView(state, p);
+    if (typeof agent === 'function') return agent(view);
+    return decide(view, { difficulty: agent, timeMs: cfg.timeMs, maxWorlds: cfg.maxWorlds }).actions;
+  };
 
   for (let guard = 0; guard < 200_000 && !isGameOver(state); guard++) {
     const ph = state.phase;
@@ -64,7 +68,7 @@ export function playMatch(cfg: MatchConfig): MatchResult {
     } else {
       const p = state.current;
       const list = ask(p);
-      if (list.length === 0) throw new Error(`agent ${cfg.agents[p]} returned no action in phase ${ph.type}`);
+      if (list.length === 0) throw new Error(`agent ${p} returned no action in phase ${ph.type}`);
       for (const a of list) {
         apply(a);
         // A draw moves on to meld or buy; a discard (or going out) ends the turn.

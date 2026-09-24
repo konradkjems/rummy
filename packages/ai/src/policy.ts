@@ -40,6 +40,8 @@ export interface PolicyParams {
   plan: PlanOptions;
   /** Evaluate each discard candidate with a fresh plan (slower, better). */
   fullDiscard: boolean;
+  /** With fullDiscard: skip re-planning cards the plan uses when the hand has free cards to throw. */
+  freeFirst?: boolean;
   /** Extra points a buy must be worth before we pay the penalty card. */
   buyMargin: number;
   /** Use inference-based feeding costs. */
@@ -54,11 +56,13 @@ export const GREEDY_PARAMS: PolicyParams = {
   feed: true,
 };
 
+/** Rollout policy: the greedy decisions with a narrower plan search and fewer discard re-plans. */
 export const FAST_PARAMS: PolicyParams = {
   turnValue: 3,
   plan: { setWidth: 4, runWidth: 5 },
-  fullDiscard: false,
-  buyMargin: 3,
+  fullDiscard: true,
+  freeFirst: true,
+  buyMargin: 2,
   feed: false,
 };
 
@@ -106,6 +110,35 @@ function nearTable(seat: Seat, t: number): number {
   return near;
 }
 
+/**
+ * Would adding a card of type t to the hand complete a new meld that contains
+ * it (a passer with two other suits, or a 4-card løber, jokers filling gaps)?
+ */
+export function formsMeldWith(counts: ArrayLike<number>, t: number): boolean {
+  if (t === JOKER_TYPE) return false;
+  const jokers = counts[JOKER_TYPE];
+  const suit = typeSuit(t);
+  const rank = typeRank(t);
+  let others = 0;
+  for (let s = 0; s < 4; s++) if (s !== suit && counts[s * 13 + rank - 1] > 0) others++;
+  if (others >= 1 && others + jokers >= 2) return true;
+  const positions = rank === 1 ? [1, 14] : [rank];
+  for (const pos of positions) {
+    for (let low = Math.max(1, pos - 3); low <= Math.min(pos, 11); low++) {
+      let missing = 0;
+      let naturals = 0;
+      for (let r = low; r < low + 4; r++) {
+        if (r === pos) continue;
+        const x = suit * 13 + (r === 14 ? 1 : r) - 1;
+        if (counts[x] > 0) naturals++;
+        else missing++;
+      }
+      if (missing <= jokers && naturals + 1 + jokers >= 4 && naturals >= 1) return true;
+    }
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Draw
 
@@ -114,16 +147,20 @@ export function decideDraw(seat: Seat, params: PolicyParams): 'deck' | 'discard'
   if (top === null) return 'deck';
   const t = cardType(top);
   if (t === JOKER_TYPE) return 'discard';
-  if (seat.opened) return seat.playable[t] ? 'discard' : 'deck';
-  const base = plan(seat, seat.counts, params);
-  if (base.missing === 0) {
-    // Ready to open: take the card only if it can be melded as well (it lowers the hand points).
-    const counts = seat.counts.slice();
-    counts[t]++;
-    return connections(seat, counts, t) >= 1.5 ? 'discard' : 'deck';
+  if (seat.opened) {
+    if (seat.playable[t]) return 'discard';
+    return seat.rules.newMeldsAfterOpening && formsMeldWith(seat.counts, t) ? 'discard' : 'deck';
   }
+  const base = plan(seat, seat.counts, params);
   const counts = seat.counts.slice();
   counts[t]++;
+  const linked = connections(seat, counts, t);
+  if (base.missing === 0) {
+    // Ready to open: take the card only if it can be melded as well (it lowers the hand points).
+    return linked >= 1.5 ? 'discard' : 'deck';
+  }
+  // A card that fills no hole and touches nothing in the hand cannot beat a blind draw.
+  if (!base.outs[t] && linked < 0.9) return 'deck';
   const withTop = plan(seat, counts, params);
   const gain = base.cost - withTop.cost;
   if (gain <= 0) return 'deck';
@@ -143,6 +180,11 @@ export function buyValue(seat: Seat, card: CardId, params: PolicyParams): number
   const t = cardType(card);
   const base = plan(seat, seat.counts, params);
   if (base.missing === 0 && t !== JOKER_TYPE) return -100;
+  if (t !== JOKER_TYPE && !base.outs[t]) {
+    const probe = seat.counts.slice();
+    probe[t]++;
+    if (connections(seat, probe, t) < 0.9) return -50;
+  }
   const counts = seat.counts.slice();
   counts[t]++;
   const withCard = plan(seat, counts, params);
@@ -170,11 +212,13 @@ export function discardScores(seat: Seat, hand: readonly CardId[], params: Polic
   const pool = naturals.length > 0 ? naturals : hand.slice();
 
   if (seat.opened) {
+    const newMelds = seat.rules.newMeldsAfterOpening;
     for (const id of pool) {
       const t = cardType(id);
       if (seen.has(t)) continue;
       seen.add(t);
-      let s = typePoints(t) - 3 * nearTable(seat, t);
+      let s = typePoints(t) * (0.5 + seat.risk) - 3 * nearTable(seat, t);
+      if (newMelds) s -= connections(seat, counts, t) * params.turnValue * 0.8;
       if (params.feed) s -= feedCost(seat, t);
       else if (seat.playable[t]) s -= 6;
       scores.set(id, s);
@@ -184,6 +228,13 @@ export function discardScores(seat: Seat, hand: readonly CardId[], params: Polic
 
   const base = plan(seat, counts, params);
   const work = counts.slice();
+  let anyFree = false;
+  if (params.freeFirst) {
+    for (const id of pool) {
+      const t = cardType(id);
+      if (t !== JOKER_TYPE && counts[t] > base.used[t]) anyFree = true;
+    }
+  }
   for (const id of pool) {
     const t = cardType(id);
     if (seen.has(t)) continue;
@@ -191,6 +242,7 @@ export function discardScores(seat: Seat, hand: readonly CardId[], params: Polic
     const free = counts[t] > base.used[t] && t !== JOKER_TYPE;
     let lost = 0;
     if (!free) {
+      if (anyFree) continue;
       if (params.fullDiscard) {
         work[t]--;
         lost = (plan(seat, work, params).cost - base.cost) * params.turnValue;
@@ -232,15 +284,42 @@ export function topDiscards(seat: Seat, hand: readonly CardId[], params: PolicyP
 // ---------------------------------------------------------------------------
 // Meld phase
 
+/** Can this card be placed anywhere right now (extend a meld, or join a new meld from the hand)? */
+function placeable(state: GameState, me: number, card: CardId): boolean {
+  for (const m of state.melds) if (extensionEnds(m, card).length > 0) return true;
+  if (!state.config.rules.newMeldsAfterOpening) return false;
+  const counts = new Int16Array(53);
+  for (const id of state.hands[me]) if (id !== card) counts[cardType(id)]++;
+  return isJoker(card)
+    ? findBestOpening(state.hands[me], NO_CONTRACT)?.some((m) => m.cards.includes(card)) === true
+    : formsMeldWith(counts, cardType(card));
+}
+
+const NO_CONTRACT = { sets: 0, runs: 0 };
+
 /**
- * Lay down everything that fits: swap jokers out of table melds (house rule)
- * and extend melds, until nothing more fits. Works on an engine state so the
- * engine validates every step. Returns the actions and the resulting state.
+ * Lay down everything that fits: new melds (house rule), joker swaps (only
+ * when the freed joker can be placed again) and extensions, until nothing
+ * more fits. Works on an engine state so the engine validates every step.
  */
 export function buildEverything(state: GameState, me: number): { actions: Action[]; state: GameState } {
   const actions: Action[] = [];
   let s = state;
-  const swap = s.config.rules.jokerSwap;
+  const rules = s.config.rules;
+  const apply = (a: Action) => {
+    s = applyAction(s, a, { log: false });
+    actions.push(a);
+  };
+  const layNewMelds = () => {
+    if (!rules.newMeldsAfterOpening || s.phase.type !== 'meld') return;
+    const melds = findBestOpening(s.hands[me], NO_CONTRACT);
+    if (!melds) return;
+    for (const meld of melds) {
+      if (s.phase.type !== 'meld') return;
+      apply({ type: 'LayMeld', player: me, meld });
+    }
+  };
+  layNewMelds();
   for (let guard = 0; guard < 60; guard++) {
     if (s.phase.type !== 'meld') break;
     const hand = s.hands[me];
@@ -249,10 +328,6 @@ export function buildEverything(state: GameState, me: number): { actions: Action
     const ordered = [...hand].sort((a, b) => Number(isJoker(a)) - Number(isJoker(b)));
     outer: for (const card of ordered) {
       for (const m of s.melds) {
-        if (swap && !isJoker(card) && jokerSwapIndex(m, card) >= 0) {
-          action = { type: 'SwapJoker', player: me, meldId: m.id, card };
-          break outer;
-        }
         const ends = extensionEnds(m, card);
         if (ends.length > 0) {
           action = { type: 'Extend', player: me, meldId: m.id, card, end: ends.includes('high') ? 'high' : ends[0] };
@@ -260,10 +335,26 @@ export function buildEverything(state: GameState, me: number): { actions: Action
         }
       }
     }
+    if (!action && rules.jokerSwap) {
+      outer2: for (const card of ordered) {
+        if (isJoker(card)) continue;
+        for (const m of s.melds) {
+          if (jokerSwapIndex(m, card) < 0) continue;
+          const swap: Action = { type: 'SwapJoker', player: me, meldId: m.id, card };
+          const trial = applyAction(s, swap, { log: false });
+          const joker = trial.hands[me].find((c) => isJoker(c) && !s.hands[me].includes(c));
+          if (joker !== undefined && placeable(trial, me, joker)) {
+            action = swap;
+            break outer2;
+          }
+        }
+      }
+    }
     if (!action) break;
-    s = applyAction(s, action, { log: false });
-    actions.push(action);
+    apply(action);
+    if (action.type === 'SwapJoker') layNewMelds();
   }
+  layNewMelds();
   return { actions, state: s };
 }
 
@@ -311,7 +402,15 @@ export function planTurn(
   let card = choice.discard ?? null;
   if (card === null || !hand.includes(card)) {
     const after: Seat = opened
-      ? { ...seat, opened: true, hand, counts: countsOf(hand), melds: s.melds, canBuild, playable: tablePlayableTypes(s.melds) }
+      ? {
+          ...seat,
+          opened: true,
+          hand,
+          counts: countsOf(hand),
+          melds: s.melds,
+          canBuild,
+          playable: tablePlayableTypes(s.melds),
+        }
       : seat;
     card = chooseDiscard(after, hand, params);
   }
@@ -352,4 +451,3 @@ export function stateFromView(view: PlayerView): GameState {
     phase: view.phase,
   };
 }
-

@@ -166,6 +166,7 @@ export function buildKnowledge(view: PlayerView): Knowledge {
         }
         break;
       case 'open':
+      case 'meld':
         if (e.p !== me) for (const c of e.cards) dec(e.p, c);
         break;
       case 'extend':
