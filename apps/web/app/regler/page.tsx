@@ -1,15 +1,40 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CONTRACTS, describeContract } from '@kova/rummy-engine';
+import { SITE_NAME, absoluteUrl, jsonLd, socialMetadata } from '@/lib/site';
 
-export const metadata = { title: 'Regler · Løbere og Passere' };
+const TITLE = 'Regler for Løbere og Passere (kontrakt-rommy)';
+const DESCRIPTION =
+  'Sådan spiller man Løbere og Passere: opstilling, passere og løbere, kontrakterne i de 7 runder, køb, point og husregler.';
+
+export const metadata: Metadata = {
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  alternates: { canonical: '/regler/' },
+  ...socialMetadata(TITLE, DESCRIPTION, '/regler/'),
+};
+
+const BREADCRUMBS = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: SITE_NAME, item: absoluteUrl('/') },
+    { '@type': 'ListItem', position: 2, name: 'Regler', item: absoluteUrl('/regler/') },
+  ],
+};
 
 export default function RulesPage() {
   return (
     <main className="page rules">
+      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(BREADCRUMBS)} />
       <nav className="page-nav">
         <Link href="/">← Forsiden</Link>
       </nav>
-      <h1>Regler</h1>
+      <h1>Regler for Løbere og Passere</h1>
+      <p className="lead">
+        Løbere og Passere er kontrakt-rommy på dansk: 7 runder, hvor hver runde har sin egen kontrakt af passere og
+        løbere, der skal lægges ned, før man må komme af med resten af sine kort.
+      </p>
 
       <section className="card-panel">
         <h2>Opstilling</h2>
@@ -114,6 +139,12 @@ export default function RulesPage() {
           </li>
         </ul>
       </section>
+
+      <p className="rules-cta">
+        <Link className="btn btn-primary big" href="/">
+          Spil et parti mod computeren
+        </Link>
+      </p>
     </main>
   );
 }

@@ -229,6 +229,14 @@ a {
   text-align: center;
   margin-top: auto;
 }
+.about p {
+  color: var(--text-2);
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+.about p:last-child {
+  margin-bottom: 0;
+}
 .card-panel {
   background: var(--surface-1);
   border: 1px solid var(--line);
@@ -356,6 +364,14 @@ select {
 .rules p {
   line-height: 1.6;
   margin: 0;
+}
+.rules .lead {
+  color: var(--text-2);
+}
+.rules-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 .tiles {
   display: grid;
