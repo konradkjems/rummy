@@ -49,6 +49,33 @@ The app is a fully static export, so either of these works:
 
 No environment variables are needed. Node 22 or newer is required (`.nvmrc`).
 
+Optional environment variables (read at build time, so redeploy after changing them):
+
+| Variable                   | Purpose                                                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `GOOGLE_SITE_VERIFICATION` | Content of Google Search Console's "HTML tag" verification. Adds `<meta name="google-site-verification">`. |
+| `NEXT_PUBLIC_SITE_URL`     | Canonical origin for a custom domain, e.g. `https://example.dk`. Defaults to Vercel's production domain.   |
+
+## SEO and Google Search Console
+
+The site ships what Search Console looks for: `/robots.txt`, `/sitemap.xml` (the front page and the rules), a canonical
+URL, title, description and Open Graph/Twitter card on every page, JSON-LD (`WebSite` and `VideoGame` on the front page,
+`BreadcrumbList` on the rules), a web manifest and icons. The game table (`/spil/`) and the local statistics page
+(`/statistik/`) are `noindex`, because they have no content for a crawler. Everything lives in `apps/web/app` plus
+`apps/web/src/lib/site.ts`.
+
+To register the site:
+
+1. In [Search Console](https://search.google.com/search-console), add a **URL prefix** property for the production URL,
+   e.g. `https://rummy-dusky.vercel.app/`. (A **Domain** property needs a DNS record, so it only works on a custom
+   domain.)
+2. Choose the **HTML tag** method and copy the `content` value only.
+3. In Vercel, add it as `GOOGLE_SITE_VERIFICATION` under Settings > Environment Variables (Production), and redeploy.
+4. Click **Verify** in Search Console.
+5. Under **Sitemaps**, submit `sitemap.xml`.
+
+Alternatively, use the **HTML file** method: put the downloaded `google….html` file in `apps/web/public/` and deploy.
+
 ## The rules as implemented
 
 The engine follows PRD section 2 exactly. The four open rule questions are switches in `RuleOptions`

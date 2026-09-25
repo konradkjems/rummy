@@ -1,49 +1,40 @@
 import type { Metadata, Viewport } from 'next';
+import { HOME_TITLE, SITE_DESCRIPTION, SITE_NAME, SITE_URL, socialMetadata } from '@/lib/site';
 import './globals.css';
 
-const description = 'Kontrakt-rommy mod en computer, der træffer det statistisk bedste valg hver gang.';
-
-/**
- * Absolute base for the share image URL (og:image must be absolute). Set
- * NEXT_PUBLIC_SITE_URL for a custom domain; on Vercel the production domain
- * is picked up from the system environment.
- */
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : 'https://rummy-dusky.vercel.app');
-
-// The share image itself is app/opengraph-image.jpg (with its .alt.txt), added by Next.js automatically.
+// Share image: app/opengraph-image.jpg (+ .alt.txt). Icons: app/icon.svg, app/apple-icon.png, app/favicon.ico.
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: 'Løbere og Passere',
-  description,
-  applicationName: 'Løbere og Passere',
-  icons: { icon: '/icon.svg' },
-  openGraph: {
-    type: 'website',
-    locale: 'da_DK',
-    url: '/',
-    siteName: 'Løbere og Passere',
-    title: 'Løbere og Passere',
-    description,
+  metadataBase: new URL(SITE_URL),
+  title: { default: HOME_TITLE, template: `%s | ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  category: 'games',
+  keywords: [
+    'løbere og passere',
+    'kontrakt-rommy',
+    'kontraktrommy',
+    'rommy',
+    'kortspil',
+    'kortspil online',
+    'passer',
+    'løber',
+    'regler',
+  ],
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 },
   },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Løbere og Passere',
-    description,
-    images: [
-      { url: '/opengraph-image.jpg', alt: 'Løbere og Passere: kontrakt-rommy mod en statistisk optimal computer' },
-    ],
-  },
+  // Google Search Console: set GOOGLE_SITE_VERIFICATION in Vercel to the value of the "HTML tag" method.
+  verification: process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : undefined,
+  formatDetection: { telephone: false, email: false, address: false },
+  ...socialMetadata(HOME_TITLE, SITE_DESCRIPTION, '/'),
 };
 
+// Pages stay zoomable; the game table (app/spil/layout.tsx) locks zoom for touch play.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
   themeColor: '#0d1712',
 };
