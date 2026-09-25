@@ -6,35 +6,16 @@ import { NUM_ROUNDS, type RuleOptions } from '@kova/rummy-engine';
 import type { Difficulty } from '@kova/rummy-ai';
 import { controller } from '@/lib/game';
 import { type SavedGame, latestUnfinished } from '@/lib/persistence';
+import { type CardThemeId, setCardTheme } from '@/lib/cardThemes';
+import { serverUrl } from '@/lib/online/client';
 import { DEFAULT_SETTINGS, type Settings, loadSettings, saveSettings, webglAvailable } from '@/lib/settings';
+import { CardCredits, CardThemePicker } from './CardThemePicker';
+import { HouseRules } from './HouseRules';
 
 const DIFFICULTIES: { id: Difficulty; name: string; text: string }[] = [
   { id: 'easy', name: 'Let', text: 'Spiller tilfældigt, men åbner når den kan.' },
   { id: 'medium', name: 'Medium', text: 'Grådig: vælger det bedste træk lige nu.' },
   { id: 'hard', name: 'Umulig', text: 'Kortoptælling, modstander-inferens og tusindvis af simulationer pr. træk.' },
-];
-
-const RULES: { key: keyof RuleOptions; label: string; help: string }[] = [
-  {
-    key: 'buildOnOpeningTurn',
-    label: 'Byg på bordet i samme tur som man åbner',
-    help: 'Ellers kan man først lægge til meldinger i sin næste tur.',
-  },
-  {
-    key: 'jokerSwap',
-    label: 'Joker på bordet må byttes med det rigtige kort',
-    help: 'Den, der er åben, tager jokeren på hånden.',
-  },
-  {
-    key: 'reshuffleDiscards',
-    label: 'Bland afsmidningsbunken, når bunken er tom',
-    help: 'Ellers slutter runden, og alle tæller deres hånd.',
-  },
-  {
-    key: 'newMeldsAfterOpening',
-    label: 'Nye meldinger efter åbning',
-    help: 'Efter åbning må man lægge nye passere og løbere i senere ture. Uden den regel kan runden gå i hårdknude.',
-  },
 ];
 
 /** Interactive part of the front page. `children` is server-rendered content shown above the footer. */
@@ -44,10 +25,12 @@ export default function HomeScreen({ children }: { children?: React.ReactNode })
   const [resume, setResume] = useState<SavedGame | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [has3d, setHas3d] = useState(true);
+  const [canPlayOnline, setCanPlayOnline] = useState(false);
 
   useEffect(() => {
     setSettings(loadSettings());
     setHas3d(webglAvailable());
+    setCanPlayOnline(serverUrl() !== null);
     latestUnfinished().then((g) => setResume(g ?? null));
   }, []);
 
@@ -57,6 +40,10 @@ export default function HomeScreen({ children }: { children?: React.ReactNode })
     saveSettings(next);
   };
   const updateRule = (patch: Partial<RuleOptions>) => update({ rules: { ...settings.rules, ...patch } });
+  const updateTheme = (cardTheme: CardThemeId) => {
+    update({ cardTheme });
+    setCardTheme(cardTheme);
+  };
 
   const start = () => {
     saveSettings(settings);
@@ -148,37 +135,7 @@ export default function HomeScreen({ children }: { children?: React.ReactNode })
               </div>
             </fieldset>
 
-            <details className="field rules-box">
-              <summary>Husregler</summary>
-              {RULES.map((r) => (
-                <label key={r.key} className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings.rules[r.key])}
-                    onChange={(e) => updateRule({ [r.key]: e.target.checked } as Partial<RuleOptions>)}
-                  />
-                  <span>
-                    {r.label}
-                    <small>{r.help}</small>
-                  </span>
-                </label>
-              ))}
-              <label className="field inline">
-                <span>Maks. køb pr. runde</span>
-                <select
-                  value={settings.rules.maxBuysPerRound ?? 'none'}
-                  onChange={(e) =>
-                    updateRule({ maxBuysPerRound: e.target.value === 'none' ? null : Number(e.target.value) })
-                  }
-                >
-                  <option value="none">Ubegrænset</option>
-                  {[1, 2, 3, 4, 5].map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <HouseRules rules={settings.rules} onChange={updateRule}>
               <label className="field inline">
                 <span>Tid til at købe</span>
                 <select value={settings.buySeconds} onChange={(e) => update({ buySeconds: Number(e.target.value) })}>
@@ -189,7 +146,7 @@ export default function HomeScreen({ children }: { children?: React.ReactNode })
                   ))}
                 </select>
               </label>
-            </details>
+            </HouseRules>
 
             <fieldset className="field">
               <legend>Bord</legend>
@@ -208,10 +165,21 @@ export default function HomeScreen({ children }: { children?: React.ReactNode })
               {!has3d && <p className="muted small">Din browser understøtter ikke WebGL, så bordet vises i 2D.</p>}
             </fieldset>
 
+            <fieldset className="field">
+              <legend>Kortdesign</legend>
+              <CardThemePicker value={settings.cardTheme} onChange={updateTheme} />
+            </fieldset>
+
             <button className="btn btn-primary big" onClick={start}>
               Del kort ud
             </button>
           </div>
+        )}
+        {canPlayOnline && (
+          <Link className="btn big online-link" href="/online/">
+            Spil online
+            <span className="btn-sub">Med venner eller andre spillere</span>
+          </Link>
         )}
         <div className="home-links">
           <Link className="btn btn-ghost" href="/statistik/">
@@ -224,7 +192,9 @@ export default function HomeScreen({ children }: { children?: React.ReactNode })
       </section>
       {children}
       <footer className="home-foot muted small">
-        Alt kører i din browser. Partier og statistik gemmes kun på denne enhed.
+        Spil mod computeren kører helt i din browser, og partier og statistik gemmes kun på denne enhed.
+        <br />
+        <CardCredits />
       </footer>
     </main>
   );

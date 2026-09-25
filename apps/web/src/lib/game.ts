@@ -22,7 +22,7 @@ import {
 import type { RoundReview } from '@kova/rummy-ai';
 import { create } from 'zustand';
 import { aiDecide, aiReview, defaultThinkingMs } from './aiClient';
-import { type SavedGame, saveGame } from './persistence';
+import { type SavedGame, latestUnfinished, saveGame } from './persistence';
 import { AI_NAMES, type Settings, loadSettings } from './settings';
 
 export const HUMAN = 0;
@@ -50,7 +50,37 @@ export interface Flash {
   celebrate?: boolean;
 }
 
+/** Online play only: what the server tells every seat besides the table itself. */
+export interface OnlineMeta {
+  code: string;
+  bots: boolean[];
+  connected: boolean[];
+  /** Local clock (ms) when the current turn is played for its player. */
+  turnDeadline: number | null;
+  /** Local clock (ms) when the next round starts anyway. */
+  nextDeadline: number | null;
+  ready: number[];
+  isHost: boolean;
+}
+
+/**
+ * What the game screen talks to: the solo controller below, or the online
+ * driver that forwards moves to the game server.
+ */
+export interface GameDriver {
+  readonly kind: 'solo' | 'online';
+  /** Make sure there is a game to show. */
+  boot(): Promise<void>;
+  /** A move by the player at this screen. Returns an error message when illegal. */
+  act(action: Action): string | null;
+  nextRound(): void;
+  newGame(): void;
+  /** Leave the table (solo: the game is saved; online: a computer takes over the seat). */
+  leave(): void;
+}
+
 export interface GameStore {
+  mode: 'solo' | 'online';
   game: SavedGame | null;
   state: GameState | null;
   settings: Settings;
@@ -63,11 +93,15 @@ export interface GameStore {
   flash: Flash | null;
   review: ReviewState;
   error: string | null;
+  /** Cards that just surfaced -> the face-down stand-in they replace (online play). */
+  renames: Map<CardId, CardId> | null;
+  online: OnlineMeta | null;
 }
 
-const IDLE_REVIEW: ReviewState = { status: 'idle', round: 0, done: 0, total: 0, data: null };
+export const IDLE_REVIEW: ReviewState = { status: 'idle', round: 0, done: 0, total: 0, data: null };
 
 export const useGame = create<GameStore>(() => ({
+  mode: 'solo',
   game: null,
   state: null,
   settings: loadSettings(),
@@ -78,6 +112,8 @@ export const useGame = create<GameStore>(() => ({
   flash: null,
   review: IDLE_REVIEW,
   error: null,
+  renames: null,
+  online: null,
 }));
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -151,7 +187,18 @@ class Controller {
       reviews: [],
     };
     this.roundStart = { state, index: 0 };
-    this.set({ game, state, settings, selected: [], handOrder: null, review: IDLE_REVIEW, error: null });
+    this.set({
+      mode: 'solo',
+      game,
+      state,
+      settings,
+      selected: [],
+      handOrder: null,
+      review: IDLE_REVIEW,
+      error: null,
+      renames: null,
+      online: null,
+    });
     void saveGame(game);
     this.schedule();
   }
@@ -173,12 +220,15 @@ class Controller {
     const round = state.round;
     const review = saved.reviews[round - 1];
     this.set({
+      mode: 'solo',
       game: saved,
       state,
       selected: [],
       handOrder: null,
       review: review ? { status: 'done', round, done: 1, total: 1, data: review } : IDLE_REVIEW,
       error: null,
+      renames: null,
+      online: null,
     });
     if (state.phase.type === 'roundOver' || state.phase.type === 'gameOver') {
       if (!review) this.startReview();
@@ -436,28 +486,58 @@ class Controller {
       });
   }
 
-  // -------------------------------------------------------------------------
-  // Hand UI helpers
-
-  toggleSelect(card: CardId) {
-    const { selected } = this.store;
-    this.set({ selected: selected.includes(card) ? selected.filter((c) => c !== card) : [...selected, card] });
-  }
-
-  clearSelection() {
-    this.set({ selected: [] });
-  }
-
-  setHandOrder(order: CardId[] | null) {
-    this.set({ handOrder: order });
-  }
-
   updateSettings(settings: Settings) {
     this.set({ settings });
   }
 }
 
 export const controller = new Controller();
+
+// ---------------------------------------------------------------------------
+// Hand UI helpers (local to this screen, whoever runs the game)
+
+export function toggleSelect(card: CardId) {
+  const { selected } = useGame.getState();
+  useGame.setState({ selected: selected.includes(card) ? selected.filter((c) => c !== card) : [...selected, card] });
+}
+
+export function clearSelection() {
+  useGame.setState({ selected: [] });
+}
+
+export function setHandOrder(order: CardId[] | null) {
+  useGame.setState({ handOrder: order });
+}
+
+/** Keep the manual hand order and selection valid for a new hand. */
+export function followHand(hand: CardId[], order: CardId[] | null, selected: CardId[]) {
+  return {
+    selected: selected.filter((c) => hand.includes(c)),
+    handOrder: order ? [...order.filter((c) => hand.includes(c)), ...hand.filter((c) => !order.includes(c))] : null,
+  };
+}
+
+/** Solo play against the computer, saved on this device. */
+export const soloDriver: GameDriver = {
+  kind: 'solo',
+  async boot() {
+    const current = useGame.getState();
+    if (current.game && current.mode === 'solo') {
+      controller.schedule();
+      return;
+    }
+    const saved = await latestUnfinished();
+    if (saved) controller.resume(saved);
+    else controller.newGame(loadSettings());
+  },
+  act: (action) => controller.human(action),
+  nextRound: () => controller.nextRound(),
+  newGame: () => controller.newGame(useGame.getState().settings),
+  leave() {
+    controller.reset();
+    useGame.setState({ game: null, state: null });
+  },
+};
 
 export function handSizeLabel(n: number): string {
   return n === 1 ? '1 kort' : `${n} kort`;

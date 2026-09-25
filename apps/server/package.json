@@ -1,0 +1,28 @@
+{
+  "name": "@kova/rummy-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authoritative multiplayer game server for Løbere og Passere (WebSocket).",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "node build.mjs",
+    "start": "node dist/main.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kova/rummy-ai": "workspace:*",
+    "@kova/rummy-engine": "workspace:*",
+    "@kova/rummy-net": "workspace:*",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

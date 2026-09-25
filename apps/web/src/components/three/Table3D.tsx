@@ -2,16 +2,19 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import type { GameState } from '@kova/rummy-engine';
+import type { CardId, GameState } from '@kova/rummy-engine';
 import { CARD_H, CARD_W, type SceneLayout, type TableDims, type TableModel } from '@/lib/tableModel';
 import { CardLayer } from './CardLayer';
 import { cardMaterial } from './cardAssets';
+import { MAX_ZOOM, markDragged, panBy, resetZoom, setTableBounds, useTableZoom, wasDragged, zoomTo } from './zoom';
 
 export interface Table3DProps {
   state: GameState;
   model: TableModel;
   layout: SceneLayout;
   thinking: number | null;
+  /** Online play: cards that just surfaced -> the face-down stand-in they replace. */
+  renames?: Map<CardId, CardId> | null;
   canDraw: boolean;
   canTakeDiscard: boolean;
   highlightMelds: Set<number>;
@@ -151,7 +154,7 @@ function ClickZone({
       rotation={[-Math.PI / 2, 0, 0]}
       geometry={glowGeometry(w, d)}
       onClick={(e) => {
-        if (!active) return;
+        if (!active || wasDragged()) return;
         e.stopPropagation();
         onClick();
       }}
@@ -175,7 +178,9 @@ function CameraRig({
   dims: TableDims;
 }) {
   const { camera, size } = useThree();
-  const look = useRef(new THREE.Vector3(0, 0, dims.cz));
+  /** The framing that shows the whole table; zoom and pan are applied on top. */
+  const base = useRef({ dist: 14, elev: 1, cz: dims.cz - 0.35 });
+  const cur = useRef({ zoom: 1, x: 0, z: 0, follow: 0 });
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     const aspect = size.width / Math.max(1, size.height);
@@ -189,20 +194,150 @@ function CameraRig({
     const elev = THREE.MathUtils.degToRad(dims.portrait ? 64 : 54);
     const distW = halfW / Math.tan(hFov / 2);
     const distD = (halfD * Math.sin(elev) + 0.4) / Math.tan((vFov * usable) / 2);
-    const dist = Math.max(distW, distD);
-    look.current.set(0, 0, dims.cz - 0.35);
-    cam.position.set(0, Math.sin(elev) * dist, dims.cz - 0.35 + Math.cos(elev) * dist);
+    base.current = { dist: Math.max(distW, distD), elev, cz: dims.cz - 0.35 };
+    setTableBounds(dims.w / 2, dims.d / 2);
     // Shift the picture so the table is centred in the visible area.
     const shift = ((bottomInset - topInset) / 2) * size.height;
     cam.setViewOffset(size.width, size.height, 0, shift, size.width, size.height);
     cam.updateProjectionMatrix();
   }, [camera, size, bottomInset, topInset, dims]);
   useFrame((_, dt) => {
-    // Subtle pan towards the active player.
-    look.current.x += (focusX * 0.08 - look.current.x) * (1 - Math.exp(-dt * 2));
-    camera.lookAt(look.current);
+    const { zoom, panX, panZ } = useTableZoom.getState();
+    const c = cur.current;
+    const k = 1 - Math.exp(-dt * 12);
+    c.zoom += (zoom - c.zoom) * k;
+    c.x += (panX - c.x) * k;
+    c.z += (panZ - c.z) * k;
+    // Subtle pan towards the active player, only while the whole table is in view.
+    const follow = zoom > 1.02 ? 0 : focusX * 0.08;
+    c.follow += (follow - c.follow) * (1 - Math.exp(-dt * 2));
+    const { dist, elev, cz } = base.current;
+    const d = dist / c.zoom;
+    const tx = c.x + c.follow;
+    const tz = cz + c.z;
+    camera.position.set(tx, Math.sin(elev) * d, tz + Math.cos(elev) * d);
+    camera.lookAt(tx, 0, tz);
   });
   return null;
+}
+
+/** Pinch, wheel, drag and double tap on the canvas. */
+function ZoomGestures({ dims }: { dims: TableDims }) {
+  const { camera, gl } = useThree();
+  useEffect(() => {
+    const el = gl.domElement;
+    const ray = new THREE.Raycaster();
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    const ndc = new THREE.Vector2();
+    const cz = dims.cz - 0.35;
+    /** Table point under a screen position, relative to the unpanned look-at point. */
+    const tablePoint = (clientX: number, clientY: number) => {
+      const r = el.getBoundingClientRect();
+      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      if (!ray.ray.intersectPlane(plane, hit)) return undefined;
+      return { x: hit.x, z: hit.z - cz };
+    };
+    /** Pan so the table point under `from` ends up under `to` (screen positions). */
+    const drag = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+      const a = tablePoint(from.x, from.y);
+      const b = tablePoint(to.x, to.y);
+      if (a && b) panBy(a.x - b.x, a.z - b.z);
+    };
+
+    const pointers = new Map<number, { x: number; y: number }>();
+    let start: { x: number; y: number } | null = null;
+    let pinch: { dist: number; zoom: number } | null = null;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      // Trackpad pinches arrive as wheel events with ctrlKey; they need a stronger response.
+      const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018));
+      zoomTo(useTableZoom.getState().zoom * factor, tablePoint(e.clientX, e.clientY));
+    };
+    const onDown = (e: PointerEvent) => {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        start = { x: e.clientX, y: e.clientY };
+        markDragged(false);
+      }
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: useTableZoom.getState().zoom };
+        markDragged(true);
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      const prev = pointers.get(e.pointerId);
+      if (!prev) return;
+      const now = { x: e.clientX, y: e.clientY };
+      pointers.set(e.pointerId, now);
+      if (pointers.size >= 2 && pinch) {
+        const [a, b] = [...pointers.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        zoomTo(pinch.zoom * (dist / Math.max(1, pinch.dist)), tablePoint(mid.x, mid.y));
+        // Moving both fingers together pans: one finger's move shifts the midpoint by half as much.
+        drag({ x: mid.x - (now.x - prev.x) / 2, y: mid.y - (now.y - prev.y) / 2 }, mid);
+        return;
+      }
+      if (!start) return;
+      if (!wasDragged() && Math.hypot(now.x - start.x, now.y - start.y) < 8) return;
+      if (useTableZoom.getState().zoom <= 1.02) return;
+      markDragged(true);
+      drag(prev, now);
+    };
+    const onUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 0) start = null;
+    };
+    const onDouble = (e: MouseEvent) => {
+      const z = useTableZoom.getState().zoom;
+      if (z > 1.05) resetZoom();
+      else zoomTo(Math.min(MAX_ZOOM, 2.2), tablePoint(e.clientX, e.clientY));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    el.addEventListener('dblclick', onDouble);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('dblclick', onDouble);
+    };
+  }, [camera, gl, dims]);
+  return null;
+}
+
+function ZoomControls() {
+  const zoom = useTableZoom((s) => s.zoom);
+  return (
+    <div className="zoom-controls" aria-label="Zoom">
+      <button
+        className="zoom-btn"
+        aria-label="Zoom ind"
+        onClick={() => zoomTo(zoom * 1.35)}
+        disabled={zoom >= MAX_ZOOM}
+      >
+        +
+      </button>
+      <button className="zoom-btn" aria-label="Zoom ud" onClick={() => zoomTo(zoom / 1.35)} disabled={zoom <= 1.001}>
+        −
+      </button>
+      {zoom > 1.02 && (
+        <button className="zoom-btn" aria-label="Vis hele bordet" onClick={resetZoom}>
+          ⤢
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** Projects the seat anchors to screen space every frame and moves the DOM labels there. */
@@ -269,6 +404,7 @@ export default function Table3D(props: Table3DProps) {
     model,
     layout,
     thinking,
+    renames,
     canDraw,
     canTakeDiscard,
     highlightMelds,
@@ -280,6 +416,8 @@ export default function Table3D(props: Table3DProps) {
   } = props;
   const focusX = model.current === model.humanSeat ? 0 : (layout.anchors[model.current]?.x ?? 0);
   const labels = useRef(new Map<number, HTMLDivElement>());
+  // Every table starts with the whole table in view.
+  useEffect(() => resetZoom, []);
   return (
     <div className="table-3d">
       <Canvas
@@ -296,6 +434,7 @@ export default function Table3D(props: Table3DProps) {
         <ambientLight intensity={0.35} />
         <directionalLight position={[2.5, 9, 6]} intensity={1.25} />
         <CameraRig bottomInset={bottomInset} topInset={topInset} focusX={focusX} dims={layout.dims} />
+        <ZoomGestures dims={layout.dims} />
         <TableMesh dims={layout.dims} />
         <DeckBlock height={layout.deckHeight} x={layout.piles.deck.x} z={layout.piles.deck.z} />
         <ClickZone
@@ -328,10 +467,11 @@ export default function Table3D(props: Table3DProps) {
             onClick={() => onMeld(id)}
           />
         ))}
-        <CardLayer state={state} layout={layout} humanSeat={model.humanSeat} />
+        <CardLayer state={state} layout={layout} humanSeat={model.humanSeat} renames={renames ?? null} />
         <LabelProjector layout={layout} labels={labels} />
       </Canvas>
       <SeatLabels model={model} thinking={thinking} labels={labels} />
+      <ZoomControls />
     </div>
   );
 }

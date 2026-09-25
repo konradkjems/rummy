@@ -8,6 +8,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
   return [
     { url: absoluteUrl('/'), lastModified, changeFrequency: 'monthly', priority: 1 },
+    { url: absoluteUrl('/online/'), lastModified, changeFrequency: 'monthly', priority: 0.9 },
     { url: absoluteUrl('/regler/'), lastModified, changeFrequency: 'monthly', priority: 0.8 },
   ];
 }

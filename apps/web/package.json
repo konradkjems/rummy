@@ -13,6 +13,7 @@
   "dependencies": {
     "@kova/rummy-ai": "workspace:*",
     "@kova/rummy-engine": "workspace:*",
+    "@kova/rummy-net": "workspace:*",
     "@react-three/fiber": "^9.8.0",
     "comlink": "^4.4.2",
     "idb": "^8.0.3",

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Card back for the "classic" deck, drawn to match the classic deck by
+  rawpixel.com / Freepik (white card, thin light-blue outline, the deck's red).
+  Original artwork for this project; point-symmetric (same after a 180 degree
+  turn). Units: 4x the source points; viewBox = the card's outer box.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="666.4" height="932.5" viewBox="0 0 666.4 932.5">
+  <defs>
+    <!-- Fine diamond lattice; the grid is aligned so the card center is a tile center. -->
+    <pattern id="lattice" patternUnits="userSpaceOnUse" x="320.2" y="443.25" width="26" height="46">
+      <rect width="26" height="46" fill="#af0f07"/>
+      <path d="M-1 -1.77L27 47.77M27 -1.77L-1 47.77" stroke="#f6dcd2" stroke-width="1.7"/>
+      <circle cx="13" cy="23" r="2.2" fill="#f6dcd2"/>
+    </pattern>
+    <clipPath id="field">
+      <rect x="44" y="44" width="578.4" height="844.5" rx="14"/>
+    </clipPath>
+    <!-- Corner fleuron, drawn for the top-left corner (pointing into it). -->
+    <g id="corner" fill="#fff">
+      <g transform="translate(104 104) rotate(-45)">
+        <path d="M0 -36C9 -24 9 -9 0 3C-9 -9 -9 -24 0 -36Z"/>
+        <path d="M-2 2C-8 -13 -22 -19 -34 -12C-23 -9 -13 -4 -2 2Z"/>
+        <path d="M2 2C8 -13 22 -19 34 -12C23 -9 13 -4 2 2Z"/>
+        <circle cx="0" cy="10" r="4.5"/>
+        <path d="M-26 14Q0 32 26 14" fill="none" stroke="#fff" stroke-width="2.4"/>
+      </g>
+    </g>
+  </defs>
+
+  <!-- Card -->
+  <rect x="0.47" y="0.47" width="665.46" height="931.56" rx="23.76" fill="#fff" stroke="#65a7dd" stroke-width="0.94"/>
+
+  <!-- Patterned field inside a white margin -->
+  <rect x="44" y="44" width="578.4" height="844.5" fill="url(#lattice)" clip-path="url(#field)"/>
+  <rect x="44" y="44" width="578.4" height="844.5" rx="14" fill="none" stroke="#af0f07" stroke-width="4"/>
+  <rect x="58" y="58" width="550.4" height="816.5" rx="8" fill="none" stroke="#fff" stroke-width="3.2"/>
+  <rect x="64" y="64" width="538.4" height="804.5" rx="6" fill="none" stroke="#fff" stroke-width="1.4"/>
+
+  <use xlink:href="#corner"/>
+  <use xlink:href="#corner" transform="rotate(180 333.2 466.25)"/>
+  <use xlink:href="#corner" transform="translate(666.4 0) scale(-1 1)"/>
+  <use xlink:href="#corner" transform="translate(0 932.5) scale(1 -1)"/>
+
+  <!-- Center medallion -->
+  <g transform="translate(333.2 466.25)">
+    <ellipse rx="150" ry="206" fill="#af0f07" stroke="#fff" stroke-width="5"/>
+    <ellipse rx="134" ry="190" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <g fill="#fff">
+      <!-- eight-petal rosette -->
+      <g id="petal">
+        <path d="M0 -168C24 -130 26 -84 0 -40C-26 -84 -24 -130 0 -168Z"/>
+      </g>
+      <use xlink:href="#petal" transform="rotate(180)"/>
+      <use xlink:href="#petal" transform="scale(0.8 0.72) rotate(90)"/>
+      <use xlink:href="#petal" transform="scale(0.8 0.72) rotate(-90)"/>
+      <use xlink:href="#petal" transform="scale(0.62) rotate(45)"/>
+      <use xlink:href="#petal" transform="scale(0.62) rotate(135)"/>
+      <use xlink:href="#petal" transform="scale(0.62) rotate(225)"/>
+      <use xlink:href="#petal" transform="scale(0.62) rotate(315)"/>
+    </g>
+    <circle r="30" fill="#af0f07" stroke="#fff" stroke-width="4"/>
+    <circle r="10" fill="#fff"/>
+  </g>
+</svg>

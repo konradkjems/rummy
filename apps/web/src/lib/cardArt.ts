@@ -5,6 +5,7 @@
  * image as a CSS sprite, so both views look identical.
  */
 import { JOKER_TYPE } from '@kova/rummy-engine';
+import type { CardTheme } from './cardThemes';
 
 export const CELL_W = 204;
 export const CELL_H = 286;
@@ -12,7 +13,8 @@ export const ATLAS_COLS = 10;
 export const ATLAS_ROWS = 6;
 export const ATLAS_SIZE = 2048;
 export const BACK_CELL = 53;
-export const CARD_ASPECT = CELL_W / CELL_H;
+/** Width / height of a card as laid out in the hand and on the 2D table. */
+export const CARD_ASPECT = 200 / 282;
 
 const RED = '#c0263a';
 const BLACK = '#1d2230';
@@ -360,19 +362,37 @@ export function getAtlasCanvas(): HTMLCanvasElement {
 
 let atlasUrl: string | null = null;
 
-/** Data URL of the atlas for CSS sprites. */
+/** Data URL of the painted atlas for CSS sprites. */
 export function getAtlasUrl(): string {
   if (!atlasUrl) atlasUrl = getAtlasCanvas().toDataURL('image/png');
   return atlasUrl;
 }
 
-/** CSS background for a card sprite rendered at the given pixel width. */
-export function spriteStyle(cell: number, width: number): Record<string, string> {
-  const scale = width / CELL_W;
+/** Atlas image URL for a theme (the painted one is a data URL). */
+export function themeAtlasUrl(theme: CardTheme): string {
+  return theme.atlas ?? getAtlasUrl();
+}
+
+/**
+ * CSS for a card sprite `width` px wide, cropped to the card itself so
+ * shadows and the selection ring hug its edges. Decks with narrower cards
+ * keep the same footprint: the card is centred with a margin (--card-pad)
+ * on each side.
+ */
+export function spriteStyle(cell: number, width: number, theme: CardTheme): Record<string, string> {
   const { col, row } = cellOf(cell);
+  const { rect } = theme;
+  const height = width / CARD_ASPECT;
+  const scale = height / rect.h;
+  const w = rect.w * scale;
+  const margin = (width - w) / 2;
   return {
-    backgroundImage: `url(${getAtlasUrl()})`,
+    width: `${w}px`,
+    height: `${height}px`,
+    // globals.css adds this to the card's side margins, including the overlap rules.
+    '--card-pad': `${margin}px`,
+    backgroundImage: `url(${themeAtlasUrl(theme)})`,
     backgroundSize: `${ATLAS_SIZE * scale}px ${ATLAS_SIZE * scale}px`,
-    backgroundPosition: `${-col * CELL_W * scale}px ${-row * CELL_H * scale}px`,
+    backgroundPosition: `${-(col * CELL_W + rect.x) * scale}px ${-(row * CELL_H + rect.y) * scale}px`,
   };
 }

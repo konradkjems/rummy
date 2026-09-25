@@ -112,9 +112,11 @@ interface CardLayerProps {
   state: GameState | null;
   layout: SceneLayout;
   humanSeat: number;
+  /** Cards that just surfaced -> the face-down stand-in they replace (online play). */
+  renames: Map<CardId, CardId> | null;
 }
 
-export function CardLayer({ state, layout, humanSeat }: CardLayerProps) {
+export function CardLayer({ state, layout, humanSeat, renames }: CardLayerProps) {
   const prevState = useRef<GameState | null>(null);
   const [entries, setEntries] = useState<Map<CardId, Entry>>(new Map());
 
@@ -122,12 +124,21 @@ export function CardLayer({ state, layout, humanSeat }: CardLayerProps) {
     setEntries((old) => {
       const next = new Map<CardId, Entry>();
       const prev = prevState.current;
+      // Stand-ins that turned into a real card: the real card starts where the stand-in lay.
+      const replaced = new Map<CardId, CardId>();
+      for (const [real, standIn] of renames ?? []) replaced.set(standIn, real);
       for (const [id, pose] of layout.poses) {
         const existing = old.get(id);
         // Only public cards show their face; face-down cards use the back on both sides.
         const reveal = pose.faceUp;
         if (existing && !existing.exiting) {
           next.set(id, { ...existing, target: pose, reveal });
+          continue;
+        }
+        const standIn = renames?.get(id);
+        const was = standIn !== undefined ? old.get(standIn) : undefined;
+        if (was && !layout.poses.has(standIn!)) {
+          next.set(id, { id, target: pose, start: { ...was.target, faceUp: false }, exiting: false, reveal });
           continue;
         }
         const where = locate(prev, id, humanSeat);
@@ -141,6 +152,24 @@ export function CardLayer({ state, layout, humanSeat }: CardLayerProps) {
           next.set(id, entry);
           continue;
         }
+        const real = replaced.get(id);
+        if (real !== undefined) {
+          // A stand-in that became a real card: on the table that card took over above;
+          // a card we drew blind flies from here into our hand, face up.
+          if (next.has(real)) continue;
+          const to = locate(state, real, humanSeat);
+          const pose = anchorPose(to, layout, true);
+          if (pose) {
+            next.set(real, {
+              id: real,
+              start: { ...entry.target, faceUp: false },
+              target: pose,
+              exiting: true,
+              reveal: to === 'human',
+            });
+          }
+          continue;
+        }
         const where = locate(state, id, humanSeat);
         const exitPose = anchorPose(where, layout, where === 'human' || entry.target.faceUp);
         if (exitPose)
@@ -149,7 +178,7 @@ export function CardLayer({ state, layout, humanSeat }: CardLayerProps) {
       return next;
     });
     prevState.current = state;
-  }, [layout, state, humanSeat]);
+  }, [layout, state, humanSeat, renames]);
 
   const onGone = useMemo(
     () => (id: CardId) =>

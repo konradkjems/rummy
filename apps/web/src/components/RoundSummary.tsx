@@ -4,6 +4,18 @@ import type { GameState } from '@kova/rummy-engine';
 import type { ReviewState } from '@/lib/game';
 import { ReviewPanel } from './ReviewPanel';
 
+interface OnlineSummary {
+  /** This player pressed "Næste runde". */
+  ready: boolean;
+  readyCount: number;
+  /** People at the table (computer players excluded). */
+  people: number;
+  /** Seconds until the next round starts anyway. */
+  secondsLeft: number | null;
+  isHost: boolean;
+  onLeave: () => void;
+}
+
 interface Props {
   state: GameState;
   names: string[];
@@ -11,9 +23,10 @@ interface Props {
   review: ReviewState;
   onNext: () => void;
   onNewGame: () => void;
+  online?: OnlineSummary;
 }
 
-export function RoundSummary({ state, names, humanSeat, review, onNext, onNewGame }: Props) {
+export function RoundSummary({ state, names, humanSeat, review, onNext, onNewGame, online }: Props) {
   const ph = state.phase;
   if (ph.type !== 'roundOver' && ph.type !== 'gameOver') return null;
   const gameOver = ph.type === 'gameOver';
@@ -70,8 +83,34 @@ export function RoundSummary({ state, names, humanSeat, review, onNext, onNewGam
         {review.status === 'done' && review.data && <ReviewPanel review={review.data} />}
         {review.status === 'error' && <p className="warn">Review kunne ikke beregnes for denne runde.</p>}
 
+        {online && !gameOver && (
+          <p className="muted small">
+            {online.ready ? `Venter på de andre (${online.readyCount}/${online.people} klar). ` : ''}
+            {online.secondsLeft !== null ? `Næste runde starter om ${online.secondsLeft} s.` : ''}
+          </p>
+        )}
+
         <div className="modal-actions">
-          {gameOver ? (
+          {online ? (
+            gameOver ? (
+              <>
+                {online.isHost ? (
+                  <button className="btn btn-primary" onClick={onNewGame}>
+                    Nyt spil ved bordet
+                  </button>
+                ) : (
+                  <p className="muted small">Værten kan starte et nyt spil ved bordet.</p>
+                )}
+                <button className="btn btn-ghost" onClick={online.onLeave}>
+                  Forlad bordet
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-primary" onClick={onNext} disabled={online.ready}>
+                {online.ready ? 'Klar' : 'Næste runde'}
+              </button>
+            )
+          ) : gameOver ? (
             <>
               <button className="btn btn-primary" onClick={onNewGame}>
                 Nyt parti

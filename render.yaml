@@ -1,0 +1,12 @@
+# Render blueprint for the multiplayer game server (the website itself runs on Vercel).
+services:
+  - type: web
+    name: rummy-server
+    runtime: docker
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ALLOWED_ORIGINS
+        sync: false

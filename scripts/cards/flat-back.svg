@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Card back for the "flat" deck, drawn to match "Poker playing cards" by
+  macrovector / Freepik (red / navy / white, dark outline, rounded corners).
+  Original artwork for this project; point-symmetric (same after a 180 degree
+  turn). Units: 10x the source points; viewBox = the card's outer box.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="409.3" height="622.9" viewBox="0 0 409.3 622.9">
+  <defs>
+    <!-- Suit pips, upright, centered on 0,0, about 40 units tall. -->
+    <path id="heart" d="M0 18C-8 10.5 -20 3 -20 -6.5C-20 -13.5 -15 -18.5 -9.5 -18.5C-5 -18.5 -1.6 -15.8 0 -12C1.6 -15.8 5 -18.5 9.5 -18.5C15 -18.5 20 -13.5 20 -6.5C20 3 8 10.5 0 18Z"/>
+    <path id="diamond" d="M0 -19.5L14.5 0L0 19.5L-14.5 0Z" stroke-linejoin="round" stroke-width="3"/>
+    <path id="spade" d="M0 -20C5 -12.5 20 -5.5 20 4.5C20 10.8 15.5 14.5 10.5 14.5C6.2 14.5 3 12.2 1.8 9.2C2.2 13.4 4.2 17.2 7.2 20H-7.2C-4.2 17.2 -2.2 13.4 -1.8 9.2C-3 12.2 -6.2 14.5 -10.5 14.5C-15.5 14.5 -20 10.8 -20 4.5C-20 -5.5 -5 -12.5 0 -20Z"/>
+    <g id="club">
+      <circle cx="0" cy="-9.5" r="8.8"/>
+      <circle cx="-9.6" cy="3.6" r="8.8"/>
+      <circle cx="9.6" cy="3.6" r="8.8"/>
+      <circle cx="0" cy="1.5" r="5"/>
+      <path d="M-1.8 2C-1.8 10 -4 16.5 -7.2 20H7.2C4 16.5 1.8 10 1.8 2Z"/>
+    </g>
+    <!-- Lattice tile, point-symmetric about its center; the grid is aligned so
+         the card center is a tile center. -->
+    <pattern id="lattice" patternUnits="userSpaceOnUse" x="182.65" y="282.45" width="44" height="58">
+      <path d="M-1 -1.3L45 59.3M45 -1.3L-1 59.3" stroke="#22226f" stroke-width="2.2"/>
+      <path d="M22 18L29 29L22 40L15 29Z" fill="#d6002b"/>
+      <circle cx="0" cy="0" r="3" fill="#fff"/>
+      <circle cx="44" cy="0" r="3" fill="#fff"/>
+      <circle cx="0" cy="58" r="3" fill="#fff"/>
+      <circle cx="44" cy="58" r="3" fill="#fff"/>
+    </pattern>
+    <clipPath id="field">
+      <rect x="44" y="44" width="321.3" height="534.9" rx="8"/>
+    </clipPath>
+  </defs>
+
+  <!-- Card -->
+  <rect x="0.94" y="0.94" width="407.42" height="621.02" rx="34.49" fill="#fff" stroke="#2d2d2d" stroke-width="1.88"/>
+
+  <!-- Red border, navy field, fine white frame -->
+  <rect x="20" y="20" width="369.3" height="582.9" rx="18" fill="#d6002b"/>
+  <rect x="32" y="32" width="345.3" height="558.9" rx="12" fill="#0c0a35"/>
+  <rect x="44" y="44" width="321.3" height="534.9" fill="url(#lattice)" clip-path="url(#field)"/>
+  <rect x="39" y="39" width="331.3" height="544.9" rx="9" fill="none" stroke="#fff" stroke-width="2.4"/>
+
+  <!-- Medallion with the four suits pointing outwards (point-symmetric) -->
+  <ellipse cx="204.65" cy="311.45" rx="118" ry="150" fill="#0c0a35" stroke="#fff" stroke-width="2.4"/>
+  <ellipse cx="204.65" cy="311.45" rx="108" ry="140" fill="#fff"/>
+  <ellipse cx="204.65" cy="311.45" rx="100" ry="132" fill="none" stroke="#d6002b" stroke-width="3"/>
+  <g transform="translate(204.65 311.45)">
+    <use xlink:href="#spade" fill="#0c0a35" transform="translate(0 -88) scale(1.25)"/>
+    <use xlink:href="#spade" fill="#0c0a35" transform="rotate(180) translate(0 -88) scale(1.25)"/>
+    <use xlink:href="#heart" fill="#d6002b" transform="rotate(90) translate(0 -64) scale(1.25)"/>
+    <use xlink:href="#heart" fill="#d6002b" transform="rotate(-90) translate(0 -64) scale(1.25)"/>
+    <use xlink:href="#club" fill="#0c0a35" transform="rotate(38) translate(0 -80) scale(1.05)"/>
+    <use xlink:href="#club" fill="#0c0a35" transform="rotate(218) translate(0 -80) scale(1.05)"/>
+    <use xlink:href="#diamond" fill="#d6002b" stroke="#d6002b" transform="rotate(-38) translate(0 -80) scale(1.05)"/>
+    <use xlink:href="#diamond" fill="#d6002b" stroke="#d6002b" transform="rotate(142) translate(0 -80) scale(1.05)"/>
+    <circle r="15" fill="#0c0a35"/>
+    <circle r="6" fill="#d6002b"/>
+  </g>
+</svg>

@@ -113,7 +113,6 @@ export function seatAnchors(numPlayers: number, humanSeat: number, dims: TableDi
   const span = dims.w - 0.9;
   const colW = span / opponents;
   const piles = pilePositions(dims);
-  let k = 0;
   for (let p = 0; p < numPlayers; p++) {
     if (p === humanSeat) {
       anchors.push({
@@ -124,7 +123,8 @@ export function seatAnchors(numPlayers: number, humanSeat: number, dims: TableDi
       });
       continue;
     }
-    // Clockwise from the human: first opponent on the left.
+    // Clockwise from the human (whatever their seat): the next player sits on the left.
+    const k = (p - humanSeat - 1 + numPlayers) % numPlayers;
     const x = -span / 2 + colW * (k + 0.5);
     // The hand fan lies on the felt at the top edge, the name label just above the rim.
     anchors.push({
@@ -133,7 +133,6 @@ export function seatAnchors(numPlayers: number, humanSeat: number, dims: TableDi
       labelZ: top - 0.62,
       zone: { x0: x - colW / 2 + 0.06, x1: x + colW / 2 - 0.06, z0: top + 1.0, z1: piles.deck.z - 0.7, dir: 1 },
     });
-    k++;
   }
   return anchors;
 }

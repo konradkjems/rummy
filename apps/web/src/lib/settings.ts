@@ -1,5 +1,6 @@
 import { DEFAULT_RULES, type RuleOptions } from '@kova/rummy-engine';
 import type { Difficulty } from '@kova/rummy-ai';
+import type { CardThemeId } from './cardThemes';
 
 export interface Settings {
   playerName: string;
@@ -13,6 +14,8 @@ export interface Settings {
   buySeconds: number;
   /** Speed of AI moves: 1 = normal. */
   pace: number;
+  /** Card design (cardThemes.ts). */
+  cardTheme: CardThemeId;
 }
 
 export const AI_NAMES = ['Astrid', 'Bent', 'Carla', 'Dines'];
@@ -25,7 +28,10 @@ export const DEFAULT_SETTINGS: Settings = {
   mode3d: true,
   buySeconds: 5,
   pace: 1,
+  cardTheme: 'standard',
 };
+
+const THEMES: readonly CardThemeId[] = ['standard', 'classic', 'flat'];
 
 const KEY = 'lp-settings-v1';
 
@@ -39,6 +45,7 @@ export function loadSettings(): Settings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       rules: { ...DEFAULT_RULES, ...(parsed.rules ?? {}) },
+      cardTheme: THEMES.includes(parsed.cardTheme as CardThemeId) ? (parsed.cardTheme as CardThemeId) : 'standard',
     };
   } catch {
     return DEFAULT_SETTINGS;

@@ -1,15 +1,19 @@
 # Løbere og Passere
 
 A web simulator of the Danish contract rummy game _Løbere og Passere_, played against a computer that makes the
-statistically best choice in every decision. It is built from the PRD in three packages:
+statistically best choice in every decision, or online with friends and strangers. It is built from the PRD in these
+packages:
 
 | Package           | What it is                                                                                                                           |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `packages/engine` | `@kova/rummy-engine`: pure, deterministic TypeScript rules engine. Zero runtime dependencies. 3-5 players.                           |
 | `packages/ai`     | `@kova/rummy-ai`: card counting, opponent inference, evaluation function, ISMCTS, self-play harness, post-round review.              |
+| `packages/net`    | `@kova/rummy-net`: online play. Wire protocol, per-seat views and the client-side table reconstruction.                              |
 | `apps/web`        | `@kova/web`: Next.js app (static export). react-three-fiber table, HTML hand overlay, AI in a Comlink Web Worker, IndexedDB storage. |
+| `apps/server`     | `@kova/rummy-server`: authoritative WebSocket game server for online tables, with computer players in worker threads.                |
 
-Everything runs in the browser. There is no backend in the MVP.
+Solo play runs entirely in the browser. Online play needs the small game server in `apps/server` (see
+[Online play](#online-play)).
 
 <p>
   <img src="docs/screenshots/table.png" width="220" alt="The 3D table on a phone">
@@ -24,7 +28,8 @@ Everything runs in the browser. There is no backend in the MVP.
 corepack enable            # or: npm i -g pnpm@10
 pnpm install
 pnpm dev                   # http://localhost:3000
-pnpm test                  # engine, AI and web unit tests
+pnpm dev:server            # game server for online play on ws://localhost:8787/ws
+pnpm test                  # engine, AI, net, server and web tests
 pnpm typecheck
 pnpm build                 # static site in apps/web/out
 ```
@@ -47,18 +52,78 @@ The app is a fully static export, so either of these works:
 2. **Set the Root Directory to `apps/web`.** Vercel then detects Next.js by itself. The workspace packages are resolved
    from the monorepo root, and Next.js handles `output: 'export'`.
 
-No environment variables are needed. Node 22 or newer is required (`.nvmrc`).
+No environment variables are needed for solo play. Node 22 or newer is required (`.nvmrc`).
 
 Optional environment variables (read at build time, so redeploy after changing them):
 
-| Variable                   | Purpose                                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `GOOGLE_SITE_VERIFICATION` | Content of Google Search Console's "HTML tag" verification. Adds `<meta name="google-site-verification">`. |
-| `NEXT_PUBLIC_SITE_URL`     | Canonical origin for a custom domain, e.g. `https://example.dk`. Defaults to Vercel's production domain.   |
+| Variable                      | Purpose                                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_MULTIPLAYER_URL` | The game server, e.g. `wss://rummy-server.up.railway.app`. Turns on online play (see below).               |
+| `GOOGLE_SITE_VERIFICATION`    | Content of Google Search Console's "HTML tag" verification. Adds `<meta name="google-site-verification">`. |
+| `NEXT_PUBLIC_SITE_URL`        | Canonical origin for a custom domain, e.g. `https://example.dk`. Defaults to Vercel's production domain.   |
+
+## Online play
+
+`/online/` lists the public tables. Players can press **Hurtigt spil** to sit down at an open table (or start one),
+create a table for everyone or a private one (joined with a five-letter code or an invite link), and the host starts the
+game when ready. Seats nobody takes get a computer player at the chosen level. No accounts: a random token in the
+browser keeps the seat, so a reload or a dropped connection returns to the same table.
+
+How it works:
+
+- **The server is authoritative.** It holds the only full `GameState`, validates every move with the engine and sends
+  each seat its own `PlayerView`. Hidden cards never leave the server, and neither does the shuffle seed; every round is
+  dealt from a fresh server-side seed, so revealing a finished round for the review gives nothing away.
+- **The browser rebuilds the table** from that view and the round's public event log (`reconstruct` in
+  `packages/net`), with face-down stand-ins for cards it cannot see. The same game screen as solo play renders it, and
+  the 3D table animates a revealed card from where its stand-in lay.
+- **Nobody waits forever.** Each turn has a clock (30-120 s, chosen by the host). When it runs out, or a player has
+  dropped, the computer plays that turn; an unanswered "KØB?" is a pass. A player who leaves is replaced by a computer.
+  The next round starts when everyone has pressed **Næste runde**, or after 45 s.
+- **Computer players** use the same AI as solo play, in worker threads so the hard level never blocks the server.
+
+### Deploying the game server
+
+Vercel serves the static site but cannot keep WebSocket connections open, so the server runs on a host that can. It is
+a plain Node process in a Docker image (`apps/server/Dockerfile`, built from the repository root), so any container host
+works. Two ready-made setups:
+
+- **Railway** (the PRD's choice): create a project from this GitHub repo. `railway.json` builds the Dockerfile and uses
+  `/health` as the health check. Under Settings > Networking, generate a public domain.
+- **Render**: create a Blueprint from this repo. `render.yaml` sets up a free web service. Free services sleep after a
+  while without traffic and take about a minute to wake up.
+
+Then:
+
+1. On the server host, set `ALLOWED_ORIGINS` to the site's origin, e.g. `https://rummy-dusky.vercel.app` (comma-separated
+   for several; unset allows any origin).
+2. In Vercel, set `NEXT_PUBLIC_MULTIPLAYER_URL` to the server's address, e.g. `wss://rummy-server.up.railway.app`
+   (`https://` also works, and `/ws` is added), and redeploy. The front page then shows **Spil online**.
+
+Server settings: `PORT` (set by the host), `ALLOWED_ORIGINS`, `BOT_THREADS` (default: CPU cores - 1) and `BOT_PACE`
+(1 = human-like pauses for computer players). `GET /health` and `GET /lobby` return JSON.
+
+Locally, `pnpm dev:server` starts the server on port 8787, and the site on `localhost` finds it without configuration.
+
+## Card designs and zoom
+
+Three card designs, chosen when starting a game or from the menu during play, apply to the hand, the 2D table and the 3D
+table alike:
+
+- **Standard**: painted in the browser, with big Danish indices (E, B, D, K).
+- **Klassisk**: traditional court cards. Designed by rawpixel.com / Freepik.
+- **Moderne**: flat, colourful illustrations. Designed by macrovector / Freepik. Joker and back drawn to match.
+
+The Freepik licence requires that attribution on the site; the front page footer and the design picker carry it. The
+atlases in `apps/web/public/cards` are rendered from the vector originals by `scripts/cards/build-atlases.mjs`; the
+original EPS files are not in the repository.
+
+The 3D table zooms with a pinch, the mouse wheel, a double tap or the **+**/**−** buttons, and pans by dragging while
+zoomed in.
 
 ## SEO and Google Search Console
 
-The site ships what Search Console looks for: `/robots.txt`, `/sitemap.xml` (the front page and the rules), a canonical
+The site ships what Search Console looks for: `/robots.txt`, `/sitemap.xml` (the front page, online play and the rules), a canonical
 URL, title, description and Open Graph/Twitter card on every page, JSON-LD (`WebSite` and `VideoGame` on the front page,
 `BreadcrumbList` on the rules), a web manifest and icons. The game table (`/spil/`) and the local statistics page
 (`/statistik/`) are `noindex`, because they have no content for a crawler. Everything lives in `apps/web/app` plus
@@ -178,8 +243,8 @@ game and review loss over time.
 
 ## Web app
 
-- **3D table** (`src/components/three`): one canvas-painted texture atlas holds all 54 card motifs plus the back, with
-  one material and one small geometry per motif. Cards ease towards poses from the mapping layer
+- **3D table** (`src/components/three`): one texture atlas holds all 54 card motifs plus the back (painted on a canvas,
+  or the chosen design's image), with one material and one small geometry per motif. Cards ease towards poses from the mapping layer
   (`src/lib/tableModel.ts`): they arc, flip, snap into melds, and the camera pans a little towards the active player.
   The table is portrait-shaped on phones and landscape-shaped on wide screens.
 - **2D fallback** (`Table2D.tsx`) renders the same table model. It is used when WebGL is missing or chosen in the menu.
@@ -188,8 +253,7 @@ game and review loss over time.
   or manual grouping, and confetti when someone lays the whole hand at once.
 - **Persistence**: each game is stored in IndexedDB as seed plus action log, and resumed by replaying it.
 
-## Not in this MVP
+## Not built yet
 
-Phase 6 (multiplayer: Railway + Supabase Realtime, lobby, auth) needs hosted services and accounts, so it is not built.
-The architecture is ready for it. The engine is pure and action-based, and the AI only sees `PlayerView`s through a
-worker API, so both can move server-side without a rewrite.
+Accounts, friends lists, chat and online statistics. Online tables are anonymous (a name and a browser token), and
+online games are not saved to the statistics page, which stays local to the device.

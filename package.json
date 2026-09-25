@@ -7,7 +7,9 @@
   },
   "scripts": {
     "dev": "pnpm --filter @kova/web dev",
+    "dev:server": "pnpm --filter @kova/rummy-server dev",
     "build": "pnpm --filter @kova/web build",
+    "build:server": "pnpm --filter @kova/rummy-server build",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "fuzz": "pnpm --filter @kova/rummy-engine fuzz",

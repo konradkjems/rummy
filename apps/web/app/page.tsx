@@ -33,7 +33,7 @@ const STRUCTURED_DATA = {
       gamePlatform: 'Webbrowser',
       applicationCategory: 'GameApplication',
       operatingSystem: 'Alle (kører i browseren)',
-      playMode: 'SinglePlayer',
+      playMode: ['SinglePlayer', 'MultiPlayer'],
       numberOfPlayers: { '@type': 'QuantitativeValue', minValue: 3, maxValue: 5 },
       offers: { '@type': 'Offer', price: 0, priceCurrency: 'DKK' },
     },
@@ -57,6 +57,10 @@ export default function HomePage() {
             Her spiller du mod 2-4 computermodstandere direkte i browseren, uden login. På sværeste niveau tæller
             computeren kort, gætter på modstandernes hænder og simulerer tusindvis af fortsættelser før hvert træk.
             Efter hver runde kan du se, hvor dine valg kostede point.
+          </p>
+          <p>
+            Du kan også <Link href="/online/">spille online</Link> med venner eller andre spillere: opret et bord, del
+            koden, og lad computeren tage de tomme pladser.
           </p>
           <p>
             <Link href="/regler/">Læs de fulde regler for Løbere og Passere</Link>

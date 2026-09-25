@@ -2,23 +2,77 @@
  * Shared GPU assets for cards: one texture (the atlas), one material and one
  * small geometry per motif. Every card mesh reuses these, which keeps the
  * scene cheap enough for older phones.
+ *
+ * The texture follows the chosen card theme: its canvas gets the painted
+ * atlas at once and the theme's image atlas as soon as it has loaded.
  */
 import * as THREE from 'three';
 import { ATLAS_SIZE, BACK_CELL, CELL_H, CELL_W, cellOf, getAtlasCanvas } from '@/lib/cardArt';
+import { type CardThemeId, cardTheme, useCardTheme } from '@/lib/cardThemes';
 import { CARD_H, CARD_THICK, CARD_W } from '@/lib/tableModel';
 
 let texture: THREE.CanvasTexture | null = null;
 let material: THREE.MeshStandardMaterial | null = null;
 const geometries = new Map<number, THREE.BufferGeometry>();
+let canvas: HTMLCanvasElement | null = null;
+let shown: CardThemeId | null = null;
+const images = new Map<string, Promise<HTMLImageElement>>();
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  let p = images.get(url);
+  if (!p) {
+    p = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Could not load ${url}`));
+      img.src = url;
+    });
+    images.set(url, p);
+  }
+  return p;
+}
+
+function paint(source: CanvasImageSource) {
+  const ctx = canvas?.getContext('2d');
+  if (!ctx || !texture) return;
+  ctx.clearRect(0, 0, ATLAS_SIZE, ATLAS_SIZE);
+  ctx.drawImage(source, 0, 0, ATLAS_SIZE, ATLAS_SIZE);
+  texture.needsUpdate = true;
+}
+
+function showTheme(id: CardThemeId) {
+  if (!texture || shown === id) return;
+  shown = id;
+  const url = cardTheme(id).atlas;
+  if (!url) {
+    paint(getAtlasCanvas());
+    return;
+  }
+  loadImage(url)
+    .then((img) => {
+      if (shown === id) paint(img);
+    })
+    .catch(() => {
+      // Keep whatever is shown; the painted deck is always there.
+    });
+}
 
 export function cardTexture(maxAnisotropy = 4): THREE.CanvasTexture {
   if (!texture) {
-    texture = new THREE.CanvasTexture(getAtlasCanvas());
+    canvas = document.createElement('canvas');
+    canvas.width = ATLAS_SIZE;
+    canvas.height = ATLAS_SIZE;
+    canvas.getContext('2d')?.drawImage(getAtlasCanvas(), 0, 0);
+    shown = 'standard';
+    texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = Math.min(8, maxAnisotropy);
     texture.generateMipmaps = true;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
+    showTheme(useCardTheme.getState().theme);
+    useCardTheme.subscribe((s) => showTheme(s.theme));
   }
   return texture;
 }

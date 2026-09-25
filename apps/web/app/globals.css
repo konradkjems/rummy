@@ -856,6 +856,8 @@ select {
   border-radius: 7%;
   background-repeat: no-repeat;
   background-color: transparent;
+  margin-left: var(--card-pad, 0px);
+  margin-right: var(--card-pad, 0px);
 }
 
 /* Buy moment */
@@ -1203,7 +1205,7 @@ select {
   margin: 4px 0;
 }
 .t2-back {
-  margin-right: -9px;
+  margin-right: calc(-9px + var(--card-pad, 0px));
 }
 .t2-melds {
   display: flex;
@@ -1219,7 +1221,7 @@ select {
   cursor: default;
 }
 .t2-meld .card-sprite + .card-sprite {
-  margin-left: -40%;
+  margin-left: calc(-40% + var(--card-pad, 0px));
 }
 .t2-meld.glow {
   border-color: var(--accent);
@@ -1296,4 +1298,219 @@ select {
   .pulse {
     animation: none;
   }
+}
+
+/* ---------- Card themes ---------- */
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.theme-option.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent) inset;
+}
+.theme-cards {
+  display: flex;
+  justify-content: center;
+}
+.theme-cards .card-sprite {
+  box-shadow: -2px 1px 4px rgba(0, 0, 0, 0.4);
+}
+.theme-cards .card-sprite + .card-sprite {
+  margin-left: calc(-12px + var(--card-pad, 0px));
+}
+.theme-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.theme-picker p {
+  margin: 8px 0 0;
+}
+.card-credits a,
+.theme-picker a {
+  color: inherit;
+}
+
+/* ---------- Online play inside the game screen ---------- */
+
+.turn-clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.status.hurry .turn-clock {
+  color: var(--buy);
+  font-weight: 700;
+}
+.menu-section h3 {
+  margin: 4px 0 8px;
+  font-size: 0.95rem;
+}
+
+/* ---------- Online lobby and tables ---------- */
+
+.page.online {
+  max-width: 560px;
+}
+.online-start {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.online-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.online-actions .btn.big {
+  min-height: 72px;
+  border-radius: 18px;
+  padding: 0.6rem 0.7rem;
+}
+.join-code {
+  display: flex;
+  gap: 8px;
+}
+.join-code input {
+  flex: 1;
+  min-width: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+}
+.lobby-list,
+.seat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lobby-row,
+.seat-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.lobby-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lobby-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seat-list li.me {
+  border-color: var(--accent);
+}
+.room-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.room-code > div {
+  display: flex;
+  flex-direction: column;
+}
+.room-code .code {
+  font-size: 2rem;
+  letter-spacing: 0.2em;
+  font-family: var(--serif);
+}
+.waiting {
+  text-align: center;
+  color: var(--text-2);
+}
+.notice-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notice-panel p {
+  margin: 0;
+}
+.conn-banner {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+}
+.conn-banner.warn {
+  border-color: #6a3a2a;
+  color: #ffcfbf;
+}
+.conn-overlay {
+  position: fixed;
+  z-index: 60;
+  top: max(8px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 420px);
+  pointer-events: none;
+}
+.conn-overlay .conn-banner {
+  pointer-events: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.online-link {
+  border-color: #3d5a4a;
+}
+
+/* ---------- 3D table zoom ---------- */
+
+.table-canvas {
+  touch-action: none;
+}
+.zoom-controls {
+  position: absolute;
+  right: max(10px, env(safe-area-inset-right));
+  top: 42%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 5;
+}
+.zoom-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(22, 36, 29, 0.82);
+  color: var(--text);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.zoom-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }

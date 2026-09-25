@@ -29,7 +29,11 @@ export default function Table2D({
   onMeld,
 }: Props) {
   const top = model.discardTop[model.discardTop.length - 1];
-  const opponents = model.seats.filter((s) => !s.isHuman);
+  // Clockwise from this player, whatever their seat.
+  const n = model.numPlayers;
+  const opponents = model.seats
+    .filter((s) => !s.isHuman)
+    .sort((a, b) => ((a.player - model.humanSeat + n) % n) - ((b.player - model.humanSeat + n) % n));
   const me = model.seats.find((s) => s.isHuman)!;
   const meldBlock = (seat: (typeof model.seats)[number], width: number) => (
     <div className="t2-melds">

@@ -13,12 +13,14 @@ import {
   describeContract,
   interpretGroup,
 } from '@kova/rummy-engine';
-import { HUMAN, controller, useGame } from '@/lib/game';
+import { type CardThemeId, setCardTheme } from '@/lib/cardThemes';
+import { type GameDriver, clearSelection, controller, setHandOrder, toggleSelect, useGame } from '@/lib/game';
 import { type BuildOption, bestMelds, buildOptions, canOpen, meldTitle, playableCards } from '@/lib/hints';
-import { latestUnfinished } from '@/lib/persistence';
-import { loadSettings, saveSettings, webglAvailable } from '@/lib/settings';
+import { translate } from '@/lib/messages';
+import { saveSettings, webglAvailable } from '@/lib/settings';
 import { buildTableModel, layoutScene, tableDims } from '@/lib/tableModel';
 import { BuyPrompt } from './BuyPrompt';
+import { CardThemePicker } from './CardThemePicker';
 import { Hand } from './Hand';
 import { Hud } from './Hud';
 import { OpenSheet } from './OpenSheet';
@@ -30,9 +32,23 @@ const Table3D = dynamic(() => import('./three/Table3D'), {
   loading: () => <div className="table-loading">Stiller bordet op…</div>,
 });
 
-export default function GameScreen() {
+/** Seconds left until a local-clock deadline, ticking once a second. */
+function useCountdown(deadline: number | null): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (deadline === null) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [deadline]);
+  return deadline === null ? null : Math.max(0, Math.ceil((deadline - now) / 1000));
+}
+
+export default function GameScreen({ driver }: { driver: GameDriver }) {
   const router = useRouter();
-  const { state, game, selected, handOrder, thinking, buyPrompt, flash, review, settings, error } = useGame();
+  const { state, game, selected, handOrder, thinking, buyPrompt, flash, review, settings, error, renames, online } =
+    useGame();
+  const onlinePlay = driver.kind === 'online';
   const [sheet, setSheet] = useState<null | 'open' | 'meld'>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
@@ -43,26 +59,19 @@ export default function GameScreen() {
   const [bottomInset, setBottomInset] = useState(0.34);
   const [topInset, setTopInset] = useState(0.12);
 
-  // Boot: keep the running game, otherwise resume the latest unfinished one or start fresh.
+  // Boot: solo keeps the running game, otherwise resumes the latest unfinished one or starts fresh.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const current = useGame.getState();
-      if (!current.game) {
-        const saved = await latestUnfinished();
-        if (cancelled) return;
-        if (saved) controller.resume(saved);
-        else controller.newGame(loadSettings());
-      } else {
-        controller.schedule();
-      }
+      await driver.boot();
+      if (cancelled) return;
       setUse3d(useGame.getState().settings.mode3d && webglAvailable());
       setBooting(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [driver]);
 
   // The 3D camera frames the table between the HUD and the hand overlay.
   useLayoutEffect(() => {
@@ -103,34 +112,37 @@ export default function GameScreen() {
     return () => window.removeEventListener('resize', update);
   }, []);
   const names = useMemo(() => game?.names ?? [], [game?.names]);
-  const model = useMemo(() => (state ? buildTableModel(state, names, HUMAN) : null), [state, names]);
+  const me = game?.humanSeat ?? 0;
+  const model = useMemo(() => (state ? buildTableModel(state, names, me) : null), [state, names, me]);
   const layout = useMemo(() => (model ? layoutScene(model, tableDims(portrait)) : null), [model, portrait]);
+  const turnLeft = useCountdown(online?.turnDeadline ?? null);
+  const nextLeft = useCountdown(online?.nextDeadline ?? null);
 
   if (booting || !state || !game || !model || !layout) {
     return <div className="table-loading">{error ?? 'Blander kortene…'}</div>;
   }
 
-  const hand = state.hands[HUMAN];
+  const hand = state.hands[me];
   const ph = state.phase;
-  const myTurn = (ph.type === 'draw' || ph.type === 'meld') && state.current === HUMAN;
+  const myTurn = (ph.type === 'draw' || ph.type === 'meld') && state.current === me;
   const canDraw = myTurn && ph.type === 'draw';
   const canTakeDiscard = canDraw && state.discard.length > 0;
   const inMeld = myTurn && ph.type === 'meld';
-  const opened = state.openedTurn[HUMAN] >= 0;
-  const canBuild = inMeld && canBuildNow(state, HUMAN);
+  const opened = state.openedTurn[me] >= 0;
+  const canBuild = inMeld && canBuildNow(state, me);
   const contract = contractForRound(state.round);
   const ready = inMeld && !opened && canOpen(hand, contract);
   const single = selected.length === 1 ? selected[0] : null;
-  const options = single !== null && canBuild ? buildOptions(state, HUMAN, single) : [];
+  const options = single !== null && canBuild ? buildOptions(state, me, single) : [];
   const highlight = new Set(options.map((o) => o.meld.id));
-  const playable = canBuild ? playableCards(state, HUMAN) : new Set<CardId>();
+  const playable = canBuild ? playableCards(state, me) : new Set<CardId>();
   const newMeld =
     canBuild && state.config.rules.newMeldsAfterOpening && selected.length >= 3 ? interpretGroup(selected) : null;
   const canLayMore = canBuild && state.config.rules.newMeldsAfterOpening && bestMelds(hand).length > 0;
   const topDiscard = state.discard[state.discard.length - 1];
 
   const act = (action: Action) => {
-    const err = controller.human(action);
+    const err = driver.act(action);
     if (err) setNotice(translate(err));
     setChoice(null);
   };
@@ -143,19 +155,22 @@ export default function GameScreen() {
   };
 
   const perform = (opt: BuildOption, card: CardId) => {
-    controller.clearSelection();
-    if (opt.kind === 'swap') act({ type: 'SwapJoker', player: HUMAN, meldId: opt.meld.id, card });
-    else act({ type: 'Extend', player: HUMAN, meldId: opt.meld.id, card, end: opt.end });
+    clearSelection();
+    if (opt.kind === 'swap') act({ type: 'SwapJoker', player: me, meldId: opt.meld.id, card });
+    else act({ type: 'Extend', player: me, meldId: opt.meld.id, card, end: opt.end });
   };
 
   const confirmMelds = (melds: MeldSpec[]) => {
     setSheet(null);
-    controller.clearSelection();
+    clearSelection();
     if (sheet === 'open') {
-      act({ type: 'Open', player: HUMAN, melds });
+      act({ type: 'Open', player: me, melds });
+    } else if (onlinePlay) {
+      // The server checks each meld against the table as it is when it arrives.
+      for (const meld of melds) act({ type: 'LayMeld', player: me, meld });
     } else {
       for (const meld of melds) {
-        const err = controller.human({ type: 'LayMeld', player: HUMAN, meld });
+        const err = driver.act({ type: 'LayMeld', player: me, meld });
         if (err) {
           setNotice(translate(err));
           break;
@@ -173,6 +188,12 @@ export default function GameScreen() {
   else if (!opened) status = ready ? 'Du kan åbne!' : `Saml ${describeContract(contract)} – og smid et kort`;
   else if (!canBuild) status = 'Du kan bygge videre fra næste tur. Smid et kort.';
   else status = selected.length ? 'Vælg hvor kortet skal hen' : 'Byg på bordet eller smid et kort';
+  // Online: the turn clock, and who is away.
+  const away = online && !myTurn && online.connected[state.current] === false;
+  if (away && (ph.type === 'draw' || ph.type === 'meld'))
+    status = `${names[state.current]} er væk – computeren spiller snart`;
+  const clock = turnLeft !== null && (ph.type === 'draw' || ph.type === 'meld') ? turnLeft : null;
+  const hurry = myTurn && clock !== null && clock <= 15;
 
   const toggle3d = () => {
     const next = !use3d;
@@ -186,18 +207,25 @@ export default function GameScreen() {
     saveSettings(s);
   };
 
+  const changeTheme = (cardTheme: CardThemeId) => {
+    const s = { ...settings, cardTheme };
+    controller.updateSettings(s);
+    saveSettings(s);
+    setCardTheme(cardTheme);
+  };
+
   const tableProps = {
     canDraw,
     canTakeDiscard,
     highlightMelds: highlight,
-    onDeck: () => act({ type: 'DrawFromDeck', player: HUMAN }),
-    onDiscard: () => act({ type: 'DrawFromDiscard', player: HUMAN }),
+    onDeck: () => act({ type: 'DrawFromDeck', player: me }),
+    onDiscard: () => act({ type: 'DrawFromDiscard', player: me }),
     onMeld,
   };
 
   return (
     <div className="game">
-      <Hud state={state} names={names} humanSeat={HUMAN} hand={hand} onMenu={() => setMenu(true)} />
+      <Hud state={state} names={names} humanSeat={me} hand={hand} onMenu={() => setMenu(true)} />
       <div className="table-area">
         {use3d ? (
           <Table3D
@@ -205,6 +233,7 @@ export default function GameScreen() {
             model={model}
             layout={layout}
             thinking={thinking}
+            renames={renames}
             bottomInset={bottomInset}
             topInset={topInset}
             {...tableProps}
@@ -224,8 +253,9 @@ export default function GameScreen() {
 
       <div className="bottom" ref={bottom}>
         <div className="action-bar">
-          <div className="status" aria-live="polite">
+          <div className={`status${hurry ? ' hurry' : ''}`} aria-live="polite">
             {status}
+            {clock !== null && <span className="turn-clock"> · {clock} s</span>}
           </div>
           <div className="actions">
             {canDraw && (
@@ -265,7 +295,7 @@ export default function GameScreen() {
               <button
                 className="btn btn-discard"
                 disabled={single === null}
-                onClick={() => single !== null && act({ type: 'Discard', player: HUMAN, card: single })}
+                onClick={() => single !== null && act({ type: 'Discard', player: me, card: single })}
               >
                 {single !== null ? `Smid ${cardLabel(single)}` : 'Smid'}
               </button>
@@ -278,8 +308,8 @@ export default function GameScreen() {
           selected={selected}
           playable={playable}
           interactive={ph.type !== 'roundOver' && ph.type !== 'gameOver'}
-          onToggle={(c) => controller.toggleSelect(c)}
-          onReorder={(o) => controller.setHandOrder(o)}
+          onToggle={toggleSelect}
+          onReorder={setHandOrder}
         />
       </div>
 
@@ -287,8 +317,8 @@ export default function GameScreen() {
         <BuyPrompt
           prompt={buyPrompt}
           discarder={discarderName}
-          onBuy={() => act({ type: 'BuyClaim', player: HUMAN })}
-          onPass={() => act({ type: 'BuyPass', player: HUMAN })}
+          onBuy={() => act({ type: 'BuyClaim', player: me })}
+          onPass={() => act({ type: 'BuyPass', player: me })}
         />
       )}
 
@@ -323,10 +353,25 @@ export default function GameScreen() {
       <RoundSummary
         state={state}
         names={names}
-        humanSeat={HUMAN}
+        humanSeat={me}
         review={review}
-        onNext={() => controller.nextRound()}
-        onNewGame={() => controller.newGame(useGame.getState().settings)}
+        onNext={() => driver.nextRound()}
+        onNewGame={() => driver.newGame()}
+        online={
+          online
+            ? {
+                ready: online.ready.includes(me),
+                readyCount: online.ready.length,
+                people: online.bots.filter((b, p) => !b && online.connected[p]).length,
+                secondsLeft: nextLeft,
+                isHost: online.isHost,
+                onLeave: () => {
+                  driver.leave();
+                  router.push('/online/');
+                },
+              }
+            : undefined
+        }
       />
 
       {menu && (
@@ -339,19 +384,35 @@ export default function GameScreen() {
             <button className="btn" onClick={toggle3d}>
               {use3d ? 'Skift til 2D-bord' : 'Skift til 3D-bord'}
             </button>
-            <Link className="btn" href="/regler/">
+            <div className="menu-section">
+              <h3>Kortdesign</h3>
+              <CardThemePicker value={settings.cardTheme} onChange={changeTheme} />
+            </div>
+            <Link className="btn" href="/regler/" target={onlinePlay ? '_blank' : undefined}>
               Regler
             </Link>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                controller.reset();
-                useGame.setState({ game: null, state: null });
-                router.push('/');
-              }}
-            >
-              Til forsiden (spillet gemmes)
-            </button>
+            {onlinePlay ? (
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  if (!window.confirm('Forlad bordet? Computeren spiller videre på din plads.')) return;
+                  driver.leave();
+                  router.push('/online/');
+                }}
+              >
+                Forlad bordet
+              </button>
+            ) : (
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  driver.leave();
+                  router.push('/');
+                }}
+              >
+                Til forsiden (spillet gemmes)
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -360,8 +421,8 @@ export default function GameScreen() {
   );
 
   function confirmMeldsDirect(meld: MeldSpec) {
-    controller.clearSelection();
-    act({ type: 'LayMeld', player: HUMAN, meld });
+    clearSelection();
+    act({ type: 'LayMeld', player: me, meld });
   }
 }
 
@@ -398,22 +459,4 @@ function Confetti() {
       ))}
     </div>
   );
-}
-
-/** Engine messages are English; show Danish to the player. */
-function translate(message: string): string {
-  const map: [RegExp, string][] = [
-    [/turn you open/, 'Du kan ikke bygge på bordet i den tur, du åbner.'],
-    [/does not fit/, 'Kortet passer ikke her.'],
-    [/contract/, 'Meldingerne dækker ikke rundens kontrakt.'],
-    [/not in hand/, 'Kortet er ikke på din hånd.'],
-    [/must open/, 'Du skal åbne med kontrakten først.'],
-    [/may not buy/, 'Du kan ikke købe dette kort.'],
-    [/No buy window/, 'For sent – kortet er væk.'],
-    [/already passed/, 'Du har allerede sagt nej.'],
-    [/not player/, 'Det er ikke din tur.'],
-    [/Invalid/, 'Det er ikke en gyldig melding.'],
-  ];
-  for (const [re, text] of map) if (re.test(message)) return text;
-  return message;
 }
